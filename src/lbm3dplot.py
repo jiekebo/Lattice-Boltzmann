@@ -12,7 +12,7 @@ import sys
 nx = 10
 ny = 10
 nz = 10
-ITER = 3
+ITER = 50
 omega = 1.0
 density = 1.0
 t1 = 1/3.0
@@ -42,7 +42,7 @@ BOUND [:,:,0] = 1.0
 BOUNDi[:,:,0] = 0.0
 
 while ts<ITER:
-    ##Propagate / Streaming step
+##Propagate / Streaming step
     T[:] = F
     #nearest-neighbours
     F[1,:,:,0]   = T[1,:,:,-1]
@@ -118,8 +118,8 @@ while ts<ITER:
     F[18,:,:-1, -1] = T[18,:,1:,0 ]
     F[18,:,-1 ,:-1] = T[18,:,0 ,1:]
     F[18,:,-1 , -1] = T[18,:,0 ,0 ]
-
-    #Densities bouncing back at next timestep
+    
+#Densities bouncing back at next timestep
     BB = np.zeros(F.shape, dtype=float)
     T[:] = F
 
@@ -143,7 +143,7 @@ while ts<ITER:
     BB[16,:,:,:] += T[17,:,:,:]
     BB[15,:,:,:] += T[18,:,:,:]
 
-    # Relax calculate equilibrium state (FEQ) with equivalent speed and density to F
+# Relax calculate equilibrium state (FEQ) with equivalent speed and density to F
     DENSITY = np.add.reduce(F)
 
     T1 = F[5,:,:,:]+F[7,:,:,:]+F[8,:,:,:]+F[11,:,:,:]+F[12,:,:,:]
@@ -180,7 +180,7 @@ while ts<ITER:
     U18 = -U17
     U19 = -U16
 
-    # Calculate equilibrium distribution: stationary
+# Calculate equilibrium distribution: stationary
     FEQ[0,:,:,:] = (t1*DENSITY)*(1.0-3.0*U_SQU/2.0)
     # nearest-neighbours
     T1 = 3.0/2.0*U_SQU
@@ -210,7 +210,7 @@ while ts<ITER:
     F *= (1.0-omega)
     F += omega * FEQ
 
-    #Densities bouncing back at next timestep
+#Densities bouncing back at next timestep
     F[1:,:,:,:] *= BOUNDi[np.newaxis,:,:,:]
     F[1:,:,:,:] += BB[1:,:,:,:]
 
