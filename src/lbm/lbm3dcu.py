@@ -61,29 +61,29 @@ mod = SourceModule("""
     __global__ void propagateKernel(float *F, float *T) {
         int index = threadIdx.x * threadIdx.y * blockIdx.x;
         
-        // Handle boundary cases to wrap around like in original code...
+        // TODO: Handle edge cases to wrap around like in original code...
         
         // Nearest neighbours
-        int F1  = threadIdx.x * threadIdx.y * (blockIdx.x - 1);
-        int F2  = threadIdx.x * threadIdx.y * (blockIdx.x + 1);
-        int F3  = threadIdx.x * (threadIdx.y - 1) * blockIdx.x;
-        int F4  = threadIdx.x * (threadIdx.y + 1) * blockIdx.x;
-        int F5  = (threadIdx.x - 1) * threadIdx.y * blockIdx.x;
-        int F6  = (threadIdx.x + 1) * threadIdx.y * blockIdx.x;
+        int F1  = 1 * threadIdx.x * threadIdx.y * (blockIdx.x - 1);
+        int F2  = 2 * threadIdx.x * threadIdx.y * (blockIdx.x + 1);
+        int F3  = 3 * threadIdx.x * (threadIdx.y - 1) * blockIdx.x;
+        int F4  = 4 * threadIdx.x * (threadIdx.y + 1) * blockIdx.x;
+        int F5  = 5 * (threadIdx.x - 1) * threadIdx.y * blockIdx.x;
+        int F6  = 6 * (threadIdx.x + 1) * threadIdx.y * blockIdx.x;
         
         // Next-nearest neighbours
-        int F7  = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F8  = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F9  = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F10 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F11 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F12 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F13 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F14 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F15 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F16 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F17 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F18 = threadIdx.x * threadIdx.y * blockIdx.x;
-        int F19 = threadIdx.x * threadIdx.y * blockIdx.x;
+        int F7  = 7  * (threadIdx.x - 1) * (threadIdx.y - 1) * blockIdx.x;
+        int F8  = 8  * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F9  = 9  * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F10 = 10 * (threadIdx.x + 1) * (threadIdx.y + 1) * blockIdx.x;
+        int F11 = 11 * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F12 = 12 * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F13 = 13 * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F14 = 14 * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F15 = 15 * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F16 = 16 * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F17 = 17 * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F18 = 18 * threadIdx.x * threadIdx.y * blockIdx.x;
+        int F19 = 19 * threadIdx.x * threadIdx.y * blockIdx.x;
     }
     """)

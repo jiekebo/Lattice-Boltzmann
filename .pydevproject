@@ -10,4 +10,8 @@
 <path>/Library/Frameworks/Python.framework/Versions/2.6/lib/python2.6/site-packages</path>
 <path>/Library/Frameworks/Python.framework/Versions/2.6/lib/python2.6/site-packages/pycuda-0.94.2-py2.6-macosx-10.3-i386.egg</path>
 </pydev_pathproperty>
+<pydev_pathproperty name="org.python.pydev.PROJECT_SOURCE_PATH">
+<path>/LBM/lbm</path>
+<path>/LBM/src</path>
+</pydev_pathproperty>
 </pydev_project>
