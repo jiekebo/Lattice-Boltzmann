@@ -160,7 +160,7 @@ while(ts<it):
     cuda.memcpy_dtoh(UX, UX_gpu)
     cuda.memcpy_dtoh(UY, UY_gpu)
     
-    UY[:,0] = UY[:,0]+deltaU
+    UX[:,0] = UX[:,0]+deltaU
     '''
     UX(ON)=0;
     UY(ON)=0;
@@ -199,6 +199,6 @@ while(ts<it):
 
 import matplotlib.pyplot as plt
 plt.hold(True)
-plt.quiver(UY,UX, pivot='middle')
+plt.quiver(UX,UY, pivot='middle')
 plt.imshow(BOUND)
 plt.show()
