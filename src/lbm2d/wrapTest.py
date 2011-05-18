@@ -6,25 +6,23 @@ Created on May 9, 2011
 
 import pycuda.autoinit
 import pycuda.driver as drv
-import numpy
+import numpy as np
 
 from pycuda.compiler import SourceModule
 mod = SourceModule("""
-__global__ void multiply_them(float *dest, float *a, float *b)
+#import <math.h>
+__global__ void multiply_them(float *dest, float* index, int *a)
 {
-  const int i = threadIdx.x;
-  dest[i] = a[i] * b[i];
+  index[threadIdx.x] = threadIdx.x-5.0f;
+  dest[threadIdx.x] = floor(1.0f/4.0)+4.0f;
 }
 """)
 
 multiply_them = mod.get_function("multiply_them")
-
-a = numpy.random.randn(400).astype(numpy.float32)
-b = numpy.random.randn(400).astype(numpy.float32)
-
-dest = numpy.zeros_like(a)
-multiply_them(
-        drv.Out(dest), drv.In(a), drv.In(b),
-        block=(400,1,1), grid=(1,1))
+a = np.zeros(11).astype(np.float32)
+dest = np.zeros_like(a).astype(np.float32)
+index = np.zeros_like(a).astype(np.float32)
+multiply_them(drv.Out(dest), drv.Out(index), drv.In(a), block=(11,1,1), grid=(1,1))
 
 print dest
+print index

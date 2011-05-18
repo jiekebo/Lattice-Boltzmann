@@ -49,54 +49,63 @@ BOUNDi[:,0] = 0.0
 F = np.array(range(9*3*3))
 F.shape = (9,3,3)
 F = F.astype(np.float32)
-T = F
-
 
 ' Allocate memory on the GPU '
 F_gpu = cuda.mem_alloc(F.size * F.dtype.itemsize)
-T_gpu = cuda.mem_alloc(T.size * T.dtype.itemsize)
 cuda.memcpy_htod(F_gpu, F)
-cuda.memcpy_htod(T_gpu, T)
 
 ' A preliminary kernel treating block index as z-component ' 
 ' x and y field is limited to available threads per block (system dependent) '
 mod = SourceModule("""
+    //   F4  F3  F2
+    //     \ | /
+    //  F5--F9--F1
+    //    / | \
+    // F6  F7  F8
+    
     __global__ void propagateKernel(float *F, float *T) {
         int nx = blockDim.x;
         int ny = blockDim.y;
         int blockSize = nx * ny;
         
         // nearest neighbours
-        int F1 = (threadIdx.x + 1) % nx + threadIdx.y * nx;
-        int F5 = threadIdx.x + ((threadIdx.y + 1) % ny) * nx;
-        //int F3 = (threadIdx.x - 1) % nx + threadIdx.y * nx;
-        //int F7 = threadIdx.x + ((threadIdx.y - 1) % ny) * nx;
+        int F1 = (threadIdx.x==0?nx-1:threadIdx.x-1) + threadIdx.y * nx; // +x
+        int F3 = threadIdx.x + (threadIdx.y==0?ny-1:threadIdx.y-1) * nx; // +y
+        int F5 = (threadIdx.x==nx-1?0:threadIdx.x+1) + threadIdx.y * nx; // -x
+        int F7 = threadIdx.x + (threadIdx.y==ny-1?0:threadIdx.y+1) * nx; // -y
         
         // next-nearest neighbours
-        int F2 = (threadIdx.x - 1) % nx + ((threadIdx.y - 1) % ny) * nx;
-        int F4 = (threadIdx.x + 1) % nx + ((threadIdx.y - 1) % ny) * nx;
-        int F6 = (threadIdx.x - 1) % nx + ((threadIdx.y + 1) % ny) * nx;
-        int F8 = (threadIdx.x + 1) % nx + ((threadIdx.y + 1) % ny) * nx;
+        int F2 = (threadIdx.x==0?nx-1:threadIdx.x-1) +
+                 (threadIdx.y==0?ny-1:threadIdx.y-1) * nx; //+x+y
+                 
+        int F4 = (threadIdx.x==nx-1?0:threadIdx.x+1) +
+                 (threadIdx.y==0?ny-1:threadIdx.y-1) * nx; //-x+y
         
-        // self
+        int F6 = (threadIdx.x==nx-1?0:threadIdx.x+1) + 
+                 (threadIdx.y==ny-1?0:threadIdx.y+1) * nx; //-x-y
+                 
+        int F8 = (threadIdx.x==0?nx-1:threadIdx.x-1) +
+                 (threadIdx.y==ny-1?0:threadIdx.y+1) * nx; //+x-y
+        
+        // current point
         int F9 = threadIdx.x + threadIdx.y * nx;
         
-        // propagate
-        F[F9] = T[F1];
-        F[blockSize + F1] = T[blockSize + F9];
-        F[2*blockSize + F5] = F[2*blockSize + F9];
-        F[3*blockSize + F9] = F[3*blockSize + F5];
+        // propagate nearest
+        F[0*blockSize + F9] = F[0*blockSize + F1];
+        F[2*blockSize + F9] = F[2*blockSize + F3];
+        F[4*blockSize + F9] = F[4*blockSize + F5];
+        F[6*blockSize + F9] = F[6*blockSize + F7];
         
-        /*
-        F[F2] = F[F9];
-        F[F4] = F[F9];
-        F[F6] = F[F9];
-        F[F8] = F[F9];*/
+        // propagate next-nearest
+        F[1*blockSize + F9] = F[1*blockSize + F2];
+        F[3*blockSize + F9] = F[3*blockSize + F4];
+        F[5*blockSize + F9] = F[5*blockSize + F6];
+        F[7*blockSize + F9] = F[7*blockSize + F8];
     }
     """)
 
 func = mod.get_function("propagateKernel")
-func(F_gpu, T_gpu, block=(nx,ny,1))
+func(F_gpu, block=(nx,ny,1))
 
 F_prop = np.empty_like(F)
 cuda.memcpy_dtoh(F_prop, F_gpu)
