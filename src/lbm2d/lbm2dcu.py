@@ -11,9 +11,9 @@ import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
 ' Simulation attributes '
-nx      = 3
-ny      = 3
-it      = 1
+nx      = 10
+ny      = 10
+it      = 5
 
 ' Constants '
 omega   = 1.0
@@ -21,6 +21,8 @@ density = 1.0
 t1      = 4/9.0
 t2      = 1/9.0
 t3      = 1/36.0
+deltaU  = 1e-7
+c_squ   = 1/3.0
 
 ' CUDA specific '
 threadsPerBlock = 256
@@ -40,10 +42,22 @@ BOUNDi  = np.ones(BOUND.shape, dtype=float)
 for i in xrange(nx):
     for j in xrange(ny):
         if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
-            BOUND [i,j] = 1.0
+            BOUND [i,j] = 0.0
             BOUNDi[i,j] = 0.0
 BOUND [:,0] = 1.0
 BOUNDi[:,0] = 0.0
+
+'''
+msize=nx*ny;
+CI=0:msize:msize*7;
+ON=find(BOUND); %matrix offset of each Occupied Node
+TO_REFLECT=[ON+CI(1) ON+CI(2) ON+CI(3) ON+CI(4) ...
+            ON+CI(5) ON+CI(6) ON+CI(7) ON+CI(8)];
+REFLECTED= [ON+CI(5) ON+CI(6) ON+CI(7) ON+CI(8) ...
+            ON+CI(1) ON+CI(2) ON+CI(3) ON+CI(4)];
+            
+avu=1; prevavu=1; ts=0; deltaU=1e-7; numactivenodes=sum(sum(1-BOUND));
+'''
 
 ' A preliminary kernel treating block index as z-component ' 
 ' x and y field is limited to available threads per block (system dependent) '
@@ -121,32 +135,70 @@ mod = SourceModule("""
     }
     """)
 
-#F = np.random.randint(1,9,size=(9,nx,ny))
-#F = np.ones((9,nx,ny), dtype=float)
-#F = np.array(range(9*3*3))
-#F.shape = (9,3,3)
-#F = F.astype(np.float32)
+ts=0
+while(ts<it):
+    ' Allocate memory on the GPU '
+    F_gpu       = cuda.mem_alloc(F.size * F.dtype.itemsize)
+    DENSITY_gpu = cuda.mem_alloc(DENSITY.size * DENSITY.dtype.itemsize)
+    UX_gpu      = cuda.mem_alloc(UX.size * UX.dtype.itemsize)
+    UY_gpu      = cuda.mem_alloc(UY.size * UY.dtype.itemsize)
+    cuda.memcpy_htod(DENSITY_gpu, DENSITY)
+    cuda.memcpy_htod(UX_gpu, UX)
+    cuda.memcpy_htod(UY_gpu, UY)
+    cuda.memcpy_htod(F_gpu, F)
+    
+    #F_prop = np.empty_like(F)
+    #cuda.memcpy_dtoh(F, F_gpu)
+    
+    prop = mod.get_function("propagateKernel")
+    prop(F_gpu, block=(nx,ny,1))
+    density = mod.get_function("densityKernel")
+    density(F_gpu, DENSITY_gpu, UX_gpu, UY_gpu, block=(nx,ny,1))
+    
+    cuda.memcpy_dtoh(F, F_gpu)
+    cuda.memcpy_dtoh(DENSITY, DENSITY_gpu)
+    cuda.memcpy_dtoh(UX, UX_gpu)
+    cuda.memcpy_dtoh(UY, UY_gpu)
+    
+    UY[:,0] = UY[:,0]+deltaU
+    '''
+    UX(ON)=0;
+    UY(ON)=0;
+    DENSITY(ON)=0;
+    '''
+    U_SQU = pow(UX[:,:],2) + pow(UY[:,:],2)
+    U_C2=UX+UY
+    U_C4=-UX+UY;
+    U_C6=-U_C2;
+    U_C8=-U_C4;
+    
+    # Calculate equilibrium distribution: stationary
+    FEQ[8,:,:]=t1*DENSITY[:,:]*(1-U_SQU[:,:]/(2*c_squ));
+    
+    # nearest-neighbours
+    FEQ[0,:,:]=t2*DENSITY[:,:]*(1+UX[:,:]/c_squ+0.5*pow((UX[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    FEQ[2,:,:]=t2*DENSITY[:,:]*(1+UY[:,:]/c_squ+0.5*pow((UY[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    FEQ[4,:,:]=t2*DENSITY[:,:]*(1-UX[:,:]/c_squ+0.5*pow((UX[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    FEQ[6,:,:]=t2*DENSITY[:,:]*(1-UY[:,:]/c_squ+0.5*pow((UY[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    
+    # next-nearest neighbours
+    FEQ[1,:,:]=t3*DENSITY[:,:]*(1+U_C2[:,:]/c_squ+0.5*pow((U_C2[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    FEQ[3,:,:]=t3*DENSITY[:,:]*(1+U_C4[:,:]/c_squ+0.5*pow((U_C4[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    FEQ[5,:,:]=t3*DENSITY[:,:]*(1+U_C6[:,:]/c_squ+0.5*pow((U_C6[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    FEQ[7,:,:]=t3*DENSITY[:,:]*(1+U_C8[:,:]/c_squ+0.5*pow((U_C8[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    
+    F=omega*FEQ+(1-omega)*F
+    
+    '''
+    F(REFLECTED)=BOUNCEDBACK;
+    prevavu=avu;
+    avu=sum(sum(UX))/numactivenodes; ts=ts+1;
+    '''
+    ts += 1
 
-' Allocate memory on the GPU '
-F_gpu       = cuda.mem_alloc(F.size * F.dtype.itemsize)
-DENSITY_gpu = cuda.mem_alloc(DENSITY.size * DENSITY.dtype.itemsize)
-UX_gpu      = cuda.mem_alloc(UX.size * UX.dtype.itemsize)
-UY_gpu      = cuda.mem_alloc(UY.size * UY.dtype.itemsize)
-cuda.memcpy_htod(DENSITY_gpu, DENSITY)
-cuda.memcpy_htod(UX_gpu, UX)
-cuda.memcpy_htod(UY_gpu, UY)
-cuda.memcpy_htod(F_gpu, F)
 
-#F_prop = np.empty_like(F)
-#cuda.memcpy_dtoh(F, F_gpu)
-
-prop = mod.get_function("propagateKernel")
-prop(F_gpu, block=(nx,ny,1))
-density = mod.get_function("densityKernel")
-density(F_gpu, DENSITY_gpu, UX_gpu, UY_gpu, block=(nx,ny,1))
-
-cuda.memcpy_dtoh(F, F_gpu)
-cuda.memcpy_dtoh(DENSITY, DENSITY_gpu)
-cuda.memcpy_dtoh(UX, UX_gpu)
-cuda.memcpy_dtoh(UY, UY_gpu)
-1+1
+import matplotlib.pyplot as plt
+plt.hold(True)
+plt.quiver(UY,UX, pivot='middle')
+plt.imshow(BOUND)
+plt.show()
