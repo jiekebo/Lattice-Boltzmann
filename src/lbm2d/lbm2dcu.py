@@ -27,11 +27,9 @@ threadsPerBlock = 256
 blocksPerGrid   = (nx*ny + threadsPerBlock - 1) / threadsPerBlock
 
 ' Create the main arrays '
-#F       = np.zeros((9,nx,ny), dtype=float)
-#FEQ     = F;
-#T       = F;
-#F[:,:,:] += density/19.0
-#FEQ[:,:,:] += density/19.0
+F           = np.zeros((9,nx,ny), dtype=float).astype(np.float32)
+F[:,:,:]   += density/19.0
+FEQ         = F;
 
 ' Create the scenery '
 BOUND   = np.zeros((nx,ny), dtype=float)
@@ -46,9 +44,9 @@ BOUNDi[:,0] = 0.0
 
 #F = np.random.randint(1,9,size=(9,nx,ny))
 #F = np.ones((9,nx,ny), dtype=float)
-F = np.array(range(9*3*3))
-F.shape = (9,3,3)
-F = F.astype(np.float32)
+#F = np.array(range(9*3*3))
+#F.shape = (9,3,3)
+#F = F.astype(np.float32)
 
 ' Allocate memory on the GPU '
 F_gpu = cuda.mem_alloc(F.size * F.dtype.itemsize)
@@ -109,4 +107,3 @@ func(F_gpu, block=(nx,ny,1))
 
 F_prop = np.empty_like(F)
 cuda.memcpy_dtoh(F_prop, F_gpu)
-1+1
