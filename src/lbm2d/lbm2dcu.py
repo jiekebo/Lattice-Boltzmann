@@ -7,7 +7,6 @@ Created on May 16, 2011
 import numpy as np
 import pycuda.driver as cuda
 import pycuda.autoinit
-import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
 ' Simulation attributes '
@@ -38,15 +37,11 @@ UX          = np.copy(DENSITY)
 UY          = np.copy(DENSITY)
 
 ' Create the scenery '
-BBCOUNT = 0
 BOUND   = np.zeros((nx,ny), dtype=float).astype(np.float32)
 for i in xrange(nx):
     for j in xrange(ny):
         if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
             BOUND [i,j] = 1.0
-            BBCOUNT += 1
-#BOUND [:,0] = 1.0
-#BOUNDi[:,0] = 0.0
 
 ' A preliminary kernel treating block index as z-component ' 
 ' x and y field is limited to available threads per block (system dependent) '
@@ -155,6 +150,11 @@ DENSITY_gpu = cuda.mem_alloc(DENSITY.size * DENSITY.dtype.itemsize)
 UX_gpu      = cuda.mem_alloc(UX.size * UX.dtype.itemsize)
 UY_gpu      = cuda.mem_alloc(UY.size * UY.dtype.itemsize)
 
+' Get kernel handles '
+prop = mod.get_function("propagateKernel")
+density = mod.get_function("densityKernel")
+bounceback = mod.get_function("bouncebackKernel")
+
 ts=0
 while(ts<it):
     cuda.memcpy_htod(DENSITY_gpu, DENSITY)
@@ -164,10 +164,6 @@ while(ts<it):
     cuda.memcpy_htod(UY_gpu, UY)
     cuda.memcpy_htod(F_gpu, F)
     
-    prop = mod.get_function("propagateKernel")
-    density = mod.get_function("densityKernel")
-    bounceback = mod.get_function("bouncebackKernel")
-    
     prop(F_gpu, block=(nx,ny,1))
     density(F_gpu, BOUND_gpu, BOUNCEBACK_gpu, DENSITY_gpu, UX_gpu, UY_gpu, block=(nx,ny,1))
     
@@ -176,6 +172,7 @@ while(ts<it):
     cuda.memcpy_dtoh(UX, UX_gpu)
     cuda.memcpy_dtoh(UY, UY_gpu)
     
+    # TODO: Make following parallel...
     UX[:,0] = UX[:,0]+deltaU
     U_SQU = pow(UX[:,:],2) + pow(UY[:,:],2)
     U_C2=UX+UY
@@ -202,7 +199,6 @@ while(ts<it):
     cuda.memcpy_htod(F_gpu, F)
     bounceback(F_gpu, BOUNCEBACK_gpu, block=(nx,ny,1))
     ts += 1
-
 
 import matplotlib.pyplot as plt
 plt.hold(True)
