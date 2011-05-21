@@ -10,9 +10,9 @@ import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 ' Simulation attributes '
-nx      = 16
-ny      = 16
-it      = 15
+nx      = 10
+ny      = 10
+it      = 900
 
 ' Constants '
 omega   = 1.0
@@ -38,11 +38,18 @@ UY          = np.copy(DENSITY)
 
 ' Create the scenery '
 BOUND   = np.zeros((nx,ny), dtype=float).astype(np.float32)
-for i in xrange(nx):
-    for j in xrange(ny):
-        if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
-            BOUND [i,j] = 1.0
-BOUND[:,0] = 1.0
+#===============================================================================
+# for i in xrange(nx):
+#    for j in xrange(ny):
+#        if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
+#            BOUND [i,j] = 1.0
+# BOUND[:,0] = 1.0
+#===============================================================================
+ 
+BOUND[0,:] = 1.0;
+BOUND[ny-1,:] = 1.0;
+
+
 
 ' A preliminary kernel treating block index as z-component ' 
 ' x and y field is limited to available threads per block (system dependent) '
@@ -161,13 +168,13 @@ bounceback = mod.get_function("bouncebackKernel")
 ' Copy constants and variables only changed on gpu ' 
 cuda.memcpy_htod(BOUND_gpu, BOUND)
 cuda.memcpy_htod(BOUNCEBACK_gpu, BOUNCEBACK)
+cuda.memcpy_htod(F_gpu, F)
 
 ts=0
 while(ts<it):
     cuda.memcpy_htod(DENSITY_gpu, DENSITY)
     cuda.memcpy_htod(UX_gpu, UX)
     cuda.memcpy_htod(UY_gpu, UY)
-    cuda.memcpy_htod(F_gpu, F)
     
     prop(F_gpu, block=(nx,ny,1))
     density(F_gpu, BOUND_gpu, BOUNCEBACK_gpu, DENSITY_gpu, UX_gpu, UY_gpu, block=(nx,ny,1))
@@ -203,7 +210,6 @@ while(ts<it):
     F=omega*FEQ+(1-omega)*F
     cuda.memcpy_htod(F_gpu, F)
     bounceback(F_gpu, BOUNCEBACK_gpu, BOUND_gpu, block=(nx,ny,1))
-    cuda.memcpy_dtoh(F, F_gpu)
     ts += 1
 
 import matplotlib.pyplot as plt
