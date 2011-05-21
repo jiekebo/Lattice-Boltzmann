@@ -10,8 +10,8 @@ import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 ' Simulation attributes '
-nx      = 10
-ny      = 10
+nx      = 32 
+ny      = 32
 it      = 900
 
 ' Constants '
@@ -24,8 +24,13 @@ deltaU  = 1e-7
 c_squ   = 1/3.0
 
 ' CUDA specific '
-threadsPerBlock = 256
-blocksPerGrid   = (nx*ny + threadsPerBlock - 1) / threadsPerBlock
+#threadsPerBlock = 256
+#blocksPerGrid   = (nx*ny + threadsPerBlock - 1) / threadsPerBlock
+dim         = 16
+blockDimX   = min(nx,dim)
+blockDimY   = min(ny,dim)
+gridDimX    = (nx+dim-1)/dim
+gridDimY    = (ny+dim-1)/dim
 
 ' Create the main arrays '
 F           = np.zeros((9,nx,ny), dtype=float).astype(np.float32)
@@ -45,14 +50,11 @@ BOUND   = np.zeros((nx,ny), dtype=float).astype(np.float32)
 #            BOUND [i,j] = 1.0
 # BOUND[:,0] = 1.0
 #===============================================================================
- 
+
 BOUND[0,:] = 1.0;
-BOUND[ny-1,:] = 1.0;
 
+#BOUND = np.random.randint(2, size=(nx,ny)).astype(np.float32)
 
-
-' A preliminary kernel treating block index as z-component ' 
-' x and y field is limited to available threads per block (system dependent) '
 mod = SourceModule("""
     //   F4  F3  F2
     //     \ | /
@@ -61,31 +63,34 @@ mod = SourceModule("""
     // F6  F7  F8
     
     __global__ void propagateKernel(float *F) {
-        int nx = blockDim.x;
-        int ny = blockDim.y;
+        int nx = blockDim.x * gridDim.x;
+        int ny = blockDim.y * gridDim.y;
         int size = nx * ny;
         
+        int x     = threadIdx.x + blockIdx.x * blockDim.x;
+        int y     = threadIdx.y + blockIdx.y * blockDim.y;
+        
         // nearest neighbours
-        int F1 = (threadIdx.x==0?nx-1:threadIdx.x-1) + threadIdx.y * nx; // +x
-        int F3 = threadIdx.x + (threadIdx.y==0?ny-1:threadIdx.y-1) * nx; // +y
-        int F5 = (threadIdx.x==nx-1?0:threadIdx.x+1) + threadIdx.y * nx; // -x
-        int F7 = threadIdx.x + (threadIdx.y==ny-1?0:threadIdx.y+1) * nx; // -y
+        int F1 = (x==0?nx-1:x-1) + y * nx; // +x
+        int F3 = x + (y==0?ny-1:y-1) * nx; // +y
+        int F5 = (x==nx-1?0:x+1) + y * nx; // -x
+        int F7 = x + (y==ny-1?0:y+1) * nx; // -y
         
         // next-nearest neighbours
-        int F2 = (threadIdx.x==0?nx-1:threadIdx.x-1) +
-                 (threadIdx.y==0?ny-1:threadIdx.y-1) * nx; //+x+y
+        int F2 = (x==0?nx-1:x-1) +
+                 (y==0?ny-1:y-1) * nx; //+x+y
                  
-        int F4 = (threadIdx.x==nx-1?0:threadIdx.x+1) +
-                 (threadIdx.y==0?ny-1:threadIdx.y-1) * nx; //-x+y
+        int F4 = (x==nx-1?0:x+1) +
+                 (y==0?ny-1:y-1) * nx; //-x+y
         
-        int F6 = (threadIdx.x==nx-1?0:threadIdx.x+1) + 
-                 (threadIdx.y==ny-1?0:threadIdx.y+1) * nx; //-x-y
+        int F6 = (x==nx-1?0:x+1) + 
+                 (y==ny-1?0:y+1) * nx; //-x-y
                  
-        int F8 = (threadIdx.x==0?nx-1:threadIdx.x-1) +
-                 (threadIdx.y==ny-1?0:threadIdx.y+1) * nx; //+x-y
+        int F8 = (x==0?nx-1:x-1) +
+                 (y==ny-1?0:y+1) * nx; //+x-y
         
         // current point
-        int F9 = threadIdx.x + threadIdx.y * nx;
+        int F9 = x + y * nx;
         
         // propagate nearest
         F[0*size + F9] = F[0*size + F1];
@@ -101,8 +106,10 @@ mod = SourceModule("""
     }
     
     __global__ void densityKernel(float *F, float *BOUND, float * BOUNCEBACK, float *D, float *UX, float *UY) {
-        int size = blockDim.x * blockDim.y;
-        int cur = threadIdx.x + threadIdx.y * blockDim.x;
+        int size  = blockDim.x * gridDim.x * blockDim.y * gridDim.y;
+        int x     = threadIdx.x + blockIdx.x * blockDim.x;
+        int y     = threadIdx.y + blockIdx.y * blockDim.y;
+        int cur   = x + y * blockDim.x * gridDim.x;
         if(BOUND[cur] == 1.0f) {
             BOUNCEBACK[0*size + cur] = F[0*size + cur];
             BOUNCEBACK[1*size + cur] = F[1*size + cur];
@@ -137,8 +144,10 @@ mod = SourceModule("""
     }
     
     __global__ void bouncebackKernel(float *F, float *BOUNCEBACK, float *BOUND) {
-        int size = blockDim.x * blockDim.y;
-        int cur = threadIdx.x + threadIdx.y * blockDim.x;
+        int size = blockDim.x * gridDim.x * blockDim.y * gridDim.y;
+        int x     = threadIdx.x + blockIdx.x * blockDim.x;
+        int y     = threadIdx.y + blockIdx.y * blockDim.y;
+        int cur   = x + y * blockDim.x * gridDim.x;
         if(BOUND[cur] == 1.0f) {
             F[0*size + cur] = BOUNCEBACK[4*size + cur];
             F[1*size + cur] = BOUNCEBACK[5*size + cur];
@@ -176,8 +185,9 @@ while(ts<it):
     cuda.memcpy_htod(UX_gpu, UX)
     cuda.memcpy_htod(UY_gpu, UY)
     
-    prop(F_gpu, block=(nx,ny,1))
-    density(F_gpu, BOUND_gpu, BOUNCEBACK_gpu, DENSITY_gpu, UX_gpu, UY_gpu, block=(nx,ny,1))
+    prop(F_gpu, block=(blockDimX,blockDimY,1), grid=(gridDimX,gridDimY))
+    density(F_gpu, BOUND_gpu, BOUNCEBACK_gpu, DENSITY_gpu, UX_gpu, UY_gpu,
+            block=(blockDimX,blockDimY,1), grid=(gridDimX,gridDimY))
     
     cuda.memcpy_dtoh(F, F_gpu)
     cuda.memcpy_dtoh(DENSITY, DENSITY_gpu)
@@ -209,7 +219,8 @@ while(ts<it):
     
     F=omega*FEQ+(1-omega)*F
     cuda.memcpy_htod(F_gpu, F)
-    bounceback(F_gpu, BOUNCEBACK_gpu, BOUND_gpu, block=(nx,ny,1))
+    bounceback(F_gpu, BOUNCEBACK_gpu, BOUND_gpu,
+               block=(blockDimX,blockDimY,1), grid=(gridDimX,gridDimY))
     ts += 1
 
 import matplotlib.pyplot as plt
