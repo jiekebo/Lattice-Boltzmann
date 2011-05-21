@@ -10,9 +10,9 @@ import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 ' Simulation attributes '
-nx      = 10
-ny      = 10
-it      = 10
+nx      = 16
+ny      = 16
+it      = 15
 
 ' Constants '
 omega   = 1.0
@@ -42,6 +42,7 @@ for i in xrange(nx):
     for j in xrange(ny):
         if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
             BOUND [i,j] = 1.0
+BOUND[:,0] = 1.0
 
 ' A preliminary kernel treating block index as z-component ' 
 ' x and y field is limited to available threads per block (system dependent) '
@@ -128,17 +129,19 @@ mod = SourceModule("""
         }
     }
     
-    __global__ void bouncebackKernel(float *F, float *BOUNCEBACK) {
+    __global__ void bouncebackKernel(float *F, float *BOUNCEBACK, float *BOUND) {
         int size = blockDim.x * blockDim.y;
         int cur = threadIdx.x + threadIdx.y * blockDim.x;
-        F[0*size + cur] = BOUNCEBACK[4*size + cur];
-        F[1*size + cur] = BOUNCEBACK[5*size + cur];
-        F[2*size + cur] = BOUNCEBACK[6*size + cur];
-        F[3*size + cur] = BOUNCEBACK[7*size + cur];
-        F[4*size + cur] = BOUNCEBACK[0*size + cur];
-        F[5*size + cur] = BOUNCEBACK[1*size + cur];
-        F[6*size + cur] = BOUNCEBACK[2*size + cur];
-        F[7*size + cur] = BOUNCEBACK[3*size + cur];
+        if(BOUND[cur] == 1.0f) {
+            F[0*size + cur] = BOUNCEBACK[4*size + cur];
+            F[1*size + cur] = BOUNCEBACK[5*size + cur];
+            F[2*size + cur] = BOUNCEBACK[6*size + cur];
+            F[3*size + cur] = BOUNCEBACK[7*size + cur];
+            F[4*size + cur] = BOUNCEBACK[0*size + cur];
+            F[5*size + cur] = BOUNCEBACK[1*size + cur];
+            F[6*size + cur] = BOUNCEBACK[2*size + cur];
+            F[7*size + cur] = BOUNCEBACK[3*size + cur];
+        }
     }
     """)
 
@@ -155,11 +158,13 @@ prop = mod.get_function("propagateKernel")
 density = mod.get_function("densityKernel")
 bounceback = mod.get_function("bouncebackKernel")
 
+' Copy constants and variables only changed on gpu ' 
+cuda.memcpy_htod(BOUND_gpu, BOUND)
+cuda.memcpy_htod(BOUNCEBACK_gpu, BOUNCEBACK)
+
 ts=0
 while(ts<it):
     cuda.memcpy_htod(DENSITY_gpu, DENSITY)
-    cuda.memcpy_htod(BOUND_gpu, BOUND)
-    cuda.memcpy_htod(BOUNCEBACK_gpu, BOUNCEBACK)
     cuda.memcpy_htod(UX_gpu, UX)
     cuda.memcpy_htod(UY_gpu, UY)
     cuda.memcpy_htod(F_gpu, F)
@@ -174,30 +179,31 @@ while(ts<it):
     
     # TODO: Make following parallel...
     UX[:,0] = UX[:,0]+deltaU
-    U_SQU = pow(UX[:,:],2) + pow(UY[:,:],2)
+    U_SQU = UX[:,:]**2 + UY[:,:]**2
     U_C2=UX+UY
-    U_C4=-UX+UY;
-    U_C6=-U_C2;
-    U_C8=-U_C4;
+    U_C4=-UX+UY
+    U_C6=-U_C2
+    U_C8=-U_C4
     
     # Calculate equilibrium distribution: stationary
-    FEQ[8,:,:]=t1*DENSITY[:,:]*(1-U_SQU[:,:]/(2*c_squ));
+    FEQ[8,:,:]=t1*DENSITY[:,:]*(1-U_SQU[:,:]/(2*c_squ))
     
     # nearest-neighbours
-    FEQ[0,:,:]=t2*DENSITY[:,:]*(1+UX[:,:]/c_squ+0.5*pow((UX[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
-    FEQ[2,:,:]=t2*DENSITY[:,:]*(1+UY[:,:]/c_squ+0.5*pow((UY[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
-    FEQ[4,:,:]=t2*DENSITY[:,:]*(1-UX[:,:]/c_squ+0.5*pow((UX[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
-    FEQ[6,:,:]=t2*DENSITY[:,:]*(1-UY[:,:]/c_squ+0.5*pow((UY[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    FEQ[0,:,:]=t2*DENSITY[:,:]*(1+UX[:,:]/c_squ+0.5*(UX[:,:]/c_squ)**2-U_SQU[:,:]/(2*c_squ))
+    FEQ[2,:,:]=t2*DENSITY[:,:]*(1+UY[:,:]/c_squ+0.5*(UY[:,:]/c_squ)**2-U_SQU[:,:]/(2*c_squ))
+    FEQ[4,:,:]=t2*DENSITY[:,:]*(1-UX[:,:]/c_squ+0.5*(UX[:,:]/c_squ)**2-U_SQU[:,:]/(2*c_squ))
+    FEQ[6,:,:]=t2*DENSITY[:,:]*(1-UY[:,:]/c_squ+0.5*(UY[:,:]/c_squ)**2-U_SQU[:,:]/(2*c_squ))
     
     # next-nearest neighbours
-    FEQ[1,:,:]=t3*DENSITY[:,:]*(1+U_C2[:,:]/c_squ+0.5*pow((U_C2[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
-    FEQ[3,:,:]=t3*DENSITY[:,:]*(1+U_C4[:,:]/c_squ+0.5*pow((U_C4[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
-    FEQ[5,:,:]=t3*DENSITY[:,:]*(1+U_C6[:,:]/c_squ+0.5*pow((U_C6[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
-    FEQ[7,:,:]=t3*DENSITY[:,:]*(1+U_C8[:,:]/c_squ+0.5*pow((U_C8[:,:]/c_squ),2)-U_SQU[:,:]/(2*c_squ))
+    FEQ[1,:,:]=t3*DENSITY[:,:]*(1+U_C2[:,:]/c_squ+0.5*(U_C2[:,:]/c_squ)**2-U_SQU[:,:]/(2*c_squ))
+    FEQ[3,:,:]=t3*DENSITY[:,:]*(1+U_C4[:,:]/c_squ+0.5*(U_C4[:,:]/c_squ)**2-U_SQU[:,:]/(2*c_squ))
+    FEQ[5,:,:]=t3*DENSITY[:,:]*(1+U_C6[:,:]/c_squ+0.5*(U_C6[:,:]/c_squ)**2-U_SQU[:,:]/(2*c_squ))
+    FEQ[7,:,:]=t3*DENSITY[:,:]*(1+U_C8[:,:]/c_squ+0.5*(U_C8[:,:]/c_squ)**2-U_SQU[:,:]/(2*c_squ))
     
     F=omega*FEQ+(1-omega)*F
     cuda.memcpy_htod(F_gpu, F)
-    bounceback(F_gpu, BOUNCEBACK_gpu, block=(nx,ny,1))
+    bounceback(F_gpu, BOUNCEBACK_gpu, BOUND_gpu, block=(nx,ny,1))
+    cuda.memcpy_dtoh(F, F_gpu)
     ts += 1
 
 import matplotlib.pyplot as plt

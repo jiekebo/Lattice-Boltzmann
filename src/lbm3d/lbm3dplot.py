@@ -9,10 +9,10 @@ import numpy as np
 import time
 import sys
 
-nx = 3
-ny = 3
-nz = 3
-ITER = 1
+nx = 10
+ny = 10
+nz = 10
+ITER = 10
 omega = 1.0
 density = 1.0
 t1 = 1/3.0
@@ -220,6 +220,6 @@ while ts<ITER:
 import matplotlib.pyplot as plt
 UX *= -1
 plt.hold(True)
-plt.quiver(UY[:,:,2],UX[:,:,2], pivot='middle')
-plt.imshow(BOUND[:,:,2])
+plt.quiver(UY[:,:,5],UX[:,:,5], pivot='middle')
+plt.imshow(BOUND[:,:,5])
 plt.show()
