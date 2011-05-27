@@ -12,7 +12,7 @@ from pycuda.compiler import SourceModule
 ' Simulation attributes '
 nx      = 10
 ny      = 10
-it      = 47
+it      = 50
 
 ' Constants '
 omega   = 1.0
@@ -44,17 +44,16 @@ UY          = np.copy(DENSITY)
 
 ' Create the scenery '
 BOUND   = np.zeros((nx,ny), dtype=float).astype(np.float32)
-#===============================================================================
-# for i in xrange(nx):
+
+#for i in xrange(nx):
 #    for j in xrange(ny):
 #        if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
 #            BOUND [i,j] = 1.0
-# BOUND[:,0] = 1.0
-#===============================================================================
-
-BOUND[0,:] = 1.0;
+#BOUND[:,0] = 1.0
 
 #BOUND = np.random.randint(2, size=(nx,ny)).astype(np.float32)
+
+BOUND[0,:] = 1.0
 
 mod = SourceModule("""
     //   F4  F3  F2

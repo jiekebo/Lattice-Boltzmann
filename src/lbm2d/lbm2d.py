@@ -9,7 +9,7 @@ import numpy as np
 ' Simulation attributes '
 nx      = 10
 ny      = 10
-it      = 50
+it      = 10
 
 ' Constants '
 omega   = 1.0
@@ -25,7 +25,6 @@ F           = np.zeros((9,nx,ny), dtype=float)
 T           = np.zeros((9,nx,ny), dtype=float)
 F[:,:,:]   += density/9.0
 FEQ         = np.copy(F)
-BOUNCEBACK  = np.zeros(F.shape, dtype=float)
 DENSITY     = np.zeros((nx,ny), dtype=float)
 UX          = np.copy(DENSITY)
 UY          = np.copy(DENSITY)
@@ -34,20 +33,18 @@ UY          = np.copy(DENSITY)
 BOUND   = np.zeros((nx,ny), dtype=float)
 BOUNDi  = np.ones(BOUND.shape, dtype=float)
 
-#===============================================================================
-# for i in xrange(nx):
+#for i in xrange(nx):
 #    for j in xrange(ny):
 #        if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
 #            BOUND [i,j] = 1.0
 #            BOUNDi [i,j] = 0.0
-# BOUND[:,0] = 1.0
-# BOUNDi[:,0] = 0.0
-#===============================================================================
+#BOUND[:,0] = 1.0
+#BOUNDi[:,0] = 0.0
+
+#BOUND = np.random.randint(2, size=(nx,ny)).astype(np.float32)
 
 BOUND[0,:] = 1.0
 BOUNDi[0,:] = 0.0
-
-#BOUND = np.random.randint(2, size=(nx,ny)).astype(np.float32)
 
 ts=0
 while(ts<it):
@@ -87,6 +84,7 @@ while(ts<it):
     F[8,1:,:-1]  = T[8,:-1,1:]
     
     # Densities bouncing back at next timestep
+    BOUNCEBACK = np.zeros(F.shape, dtype=float)
     T[:] = F
     
     T[1:,:,:] *= BOUND[np.newaxis,:,:]
@@ -122,7 +120,7 @@ while(ts<it):
     U_C8=-U_C4
     
     # Calculate equilibrium distribution: stationary
-    FEQ[0,:,:]=t1*DENSITY*(1-U_SQU  /(2*c_squ))
+    FEQ[0,:,:]=t1*DENSITY*(1-U_SQU/(2*c_squ))
     
     # nearest-neighbours
     FEQ[1,:,:]=t2*DENSITY*(1+UX/c_squ+0.5*(UX/c_squ)**2-U_SQU/(2*c_squ))
@@ -145,8 +143,8 @@ while(ts<it):
     ts += 1
 
 import matplotlib.pyplot as plt
-UX *= -1
+#UX *= -1
 plt.hold(True)
-plt.quiver(UY,UX, pivot='middle')
+plt.quiver(UX,UY, pivot='middle')
 plt.imshow(BOUND)
 plt.show()
