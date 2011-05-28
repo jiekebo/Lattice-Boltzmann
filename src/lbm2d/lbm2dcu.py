@@ -12,7 +12,7 @@ from pycuda.compiler import SourceModule
 ' Simulation attributes '
 nx      = 10
 ny      = 10
-it      = 3
+it      = 150
 
 ' Constants '
 omega   = 1.0
@@ -56,7 +56,6 @@ elif scenery == 1:
     BOUND[:,0] = 1.0
 elif scenery == 2:
     BOUND  = np.random.randint(2, size=(nx,ny)).astype(np.float32)
-
 
 mod = SourceModule("""
     //   F4  F3  F2
@@ -148,6 +147,52 @@ mod = SourceModule("""
         }
     }
     
+    __global__ void eqKernel(float *F, float* FEQ, float *DENSITY, float *UX, 
+    float *UY, float *U_SQU, float *U_C2, float *U_C4, float *U_C6, float *U_C8) {
+        int size = blockDim.x * gridDim.x * blockDim.y * gridDim.y;
+        int x     = threadIdx.x + blockIdx.x * blockDim.x;
+        int y     = threadIdx.y + blockIdx.y * blockDim.y;
+        int cur   = x + y * blockDim.x * gridDim.x;
+        
+        // constants
+        float t1 = 0.44444444444444442f;
+        float t2 = 0.1111111111111111f;
+        float t3 = 0.027777777777777776f;
+        float c_squ = 0.33333333333333331f;
+        float omega = 1.0f;
+        
+        U_SQU[cur] = UX[cur]*UX[cur] + UY[cur]*UY[cur];
+        U_C2[cur]  =UX[cur]+UY[cur];
+        U_C4[cur]  =-UX[cur]+UY[cur];
+        U_C6[cur]  =-U_C2[cur];
+        U_C8[cur]  =-U_C4[cur];
+        
+        // Calculate equilibrium distribution: stationary
+        FEQ[0*size + cur] = t1*DENSITY[cur]*(1-U_SQU[cur]/(2*c_squ));
+        
+        // nearest-neighbours
+        FEQ[1*size + cur]=t2*DENSITY[cur]*(1+UX[cur]/c_squ+0.5f*(UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+        FEQ[3*size + cur]=t2*DENSITY[cur]*(1+UY[cur]/c_squ+0.5f*(UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+        FEQ[5*size + cur]=t2*DENSITY[cur]*(1-UX[cur]/c_squ+0.5f*(UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+        FEQ[7*size + cur]=t2*DENSITY[cur]*(1-UY[cur]/c_squ+0.5f*(UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+        
+        // next-nearest neighbours
+        FEQ[2*size + cur]=t3*DENSITY[cur]*(1+U_C2[cur]/c_squ+0.5f*(U_C2[cur]/c_squ)*(U_C2[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+        FEQ[4*size + cur]=t3*DENSITY[cur]*(1+U_C4[cur]/c_squ+0.5f*(U_C4[cur]/c_squ)*(U_C4[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+        FEQ[6*size + cur]=t3*DENSITY[cur]*(1+U_C6[cur]/c_squ+0.5f*(U_C6[cur]/c_squ)*(U_C6[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+        FEQ[8*size + cur]=t3*DENSITY[cur]*(1+U_C8[cur]/c_squ+0.5f*(U_C8[cur]/c_squ)*(U_C8[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+        
+        F[0*size + cur]=omega*FEQ[0*size + cur]+(1-omega)*F[0*size + cur];
+        F[1*size + cur]=omega*FEQ[1*size + cur]+(1-omega)*F[1*size + cur];
+        F[2*size + cur]=omega*FEQ[2*size + cur]+(1-omega)*F[2*size + cur];
+        F[3*size + cur]=omega*FEQ[3*size + cur]+(1-omega)*F[3*size + cur];
+        F[4*size + cur]=omega*FEQ[4*size + cur]+(1-omega)*F[4*size + cur];
+        F[5*size + cur]=omega*FEQ[5*size + cur]+(1-omega)*F[5*size + cur];
+        F[6*size + cur]=omega*FEQ[6*size + cur]+(1-omega)*F[6*size + cur];
+        F[7*size + cur]=omega*FEQ[7*size + cur]+(1-omega)*F[7*size + cur];
+        F[8*size + cur]=omega*FEQ[8*size + cur]+(1-omega)*F[8*size + cur];
+    }
+    
     __global__ void bouncebackKernel(float *F, float *BOUNCEBACK, float *BOUND) {
         int size = blockDim.x * gridDim.x * blockDim.y * gridDim.y;
         int x     = threadIdx.x + blockIdx.x * blockDim.x;
@@ -232,21 +277,21 @@ while(ts<it):
     U_C8=-U_C4
     
     # Calculate equilibrium distribution: stationary
-    FEQ[8,:,:]=t1*DENSITY*(1-U_SQU/(2*c_squ))
+    FEQ[0,:,:]=t1*DENSITY*(1-U_SQU/(2*c_squ))
     
     # nearest-neighbours
-    FEQ[1,:,:] = t2*DENSITY*(1+UX/c_squ+0.5*(UX/c_squ)**2-U_SQU/(2*c_squ))
-    FEQ[3,:,:] = t2*DENSITY*(1+UY/c_squ+0.5*(UY/c_squ)**2-U_SQU/(2*c_squ))
-    FEQ[5,:,:] = t2*DENSITY*(1-UX/c_squ+0.5*(UX/c_squ)**2-U_SQU/(2*c_squ))
-    FEQ[7,:,:] = t2*DENSITY*(1-UY/c_squ+0.5*(UY/c_squ)**2-U_SQU/(2*c_squ))
+    FEQ[1,:,:]=t2*DENSITY*(1+UX/c_squ+0.5*(UX/c_squ)**2-U_SQU/(2*c_squ))
+    FEQ[3,:,:]=t2*DENSITY*(1+UY/c_squ+0.5*(UY/c_squ)**2-U_SQU/(2*c_squ))
+    FEQ[5,:,:]=t2*DENSITY*(1-UX/c_squ+0.5*(UX/c_squ)**2-U_SQU/(2*c_squ))
+    FEQ[7,:,:]=t2*DENSITY*(1-UY/c_squ+0.5*(UY/c_squ)**2-U_SQU/(2*c_squ))
     
     # next-nearest neighbours
-    FEQ[2,:,:] = t3*DENSITY*(1+U_C2/c_squ+0.5*(U_C2/c_squ)**2-U_SQU/(2*c_squ))
-    FEQ[4,:,:] = t3*DENSITY*(1+U_C4/c_squ+0.5*(U_C4/c_squ)**2-U_SQU/(2*c_squ))
-    FEQ[6,:,:] = t3*DENSITY*(1+U_C6/c_squ+0.5*(U_C6/c_squ)**2-U_SQU/(2*c_squ))
-    FEQ[8,:,:] = t3*DENSITY*(1+U_C8/c_squ+0.5*(U_C8/c_squ)**2-U_SQU/(2*c_squ))
+    FEQ[2,:,:]=t3*DENSITY*(1+U_C2/c_squ+0.5*(U_C2/c_squ)**2-U_SQU/(2*c_squ))
+    FEQ[4,:,:]=t3*DENSITY*(1+U_C4/c_squ+0.5*(U_C4/c_squ)**2-U_SQU/(2*c_squ))
+    FEQ[6,:,:]=t3*DENSITY*(1+U_C6/c_squ+0.5*(U_C6/c_squ)**2-U_SQU/(2*c_squ))
+    FEQ[8,:,:]=t3*DENSITY*(1+U_C8/c_squ+0.5*(U_C8/c_squ)**2-U_SQU/(2*c_squ))
     
-    F=omega*FEQ+(1-omega)*F
+    F=omega*FEQ+(1.0-omega)*F
     
     cuda.memcpy_htod(F_gpu, F)
     bounceback(F_gpu, BOUNCEBACK_gpu, BOUND_gpu,
