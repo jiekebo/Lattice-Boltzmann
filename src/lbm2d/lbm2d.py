@@ -9,7 +9,7 @@ import numpy as np
 ' Simulation attributes '
 nx      = 10
 ny      = 10
-it      = 150
+it      = 900
 
 ' Constants '
 omega   = 1.0
