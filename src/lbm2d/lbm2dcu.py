@@ -10,8 +10,8 @@ import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 ' Simulation attributes '
-nx = 10
-ny = 10
+nx = 32
+ny = 32
 it = 900
 
 ' Constant '
@@ -31,16 +31,24 @@ BOUND       = np.copy(DENSITY)
 ' Create the scenery '
 scenery = 0
 
+# Tunnel
 if scenery == 0:
-    BOUND[0,:] = 1.0
+    BOUND  [0,:] = 1.0
+# Circle
 elif scenery == 1:
     for i in xrange(nx):
         for j in xrange(ny):
             if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
-                BOUND[i,j] = 1.0
-    BOUND[:,0] = 1.0
+                BOUND  [i,j] = 1.0
+    BOUND  [:,0] = 1.0
+# Random porous domain
 elif scenery == 2:
     BOUND  = np.random.randint(2, size=(nx,ny)).astype(np.float32)
+# Lid driven cavity cavity
+elif scenery == 3:
+    BOUND  [-1,:]  = 1.0
+    BOUND  [1:,0]  = 1.0
+    BOUND  [1:,-1] = 1.0
 
 ''' CUDA specific '''
 ' Calculate block and grid dimensions '
@@ -134,6 +142,9 @@ mod = SourceModule("""
         int x     = threadIdx.x + blockIdx.x * blockDim.x;
         int y     = threadIdx.y + blockIdx.y * blockDim.y;
         int cur   = x + y * blockDim.x * gridDim.x;
+        
+        float deltaU = 0.0000001;
+        
         if(BOUND[cur] == 1.0f) {
             BOUNCEBACK[1*size + cur] = F[5*size + cur];
             BOUNCEBACK[2*size + cur] = F[6*size + cur];
@@ -166,8 +177,13 @@ mod = SourceModule("""
                     / DENSITY;
                     
         if(x == 0) {
-            UX[cur] += 0.0000001f;
+            UX[cur] += 0.0004f;
         }
+        
+        // For lid driven cavity
+        /*if(y == 0) {
+            UX[cur] += 0.0004f;
+        }*/
         
         if(BOUND[cur] == 1.0f) {
             D[cur] = 0.0f;
@@ -282,4 +298,5 @@ UY *= -1
 plt.hold(True)
 plt.quiver(UX,UY, pivot='middle', color='blue')
 plt.imshow(BOUND, interpolation='nearest', cmap='gist_yarg')
+#plt.imshow(np.sqrt(UX*UX+UY*UY)) # fancy rainbow plot
 plt.show()

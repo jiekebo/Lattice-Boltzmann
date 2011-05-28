@@ -7,9 +7,9 @@ Created on May 23, 2011
 import numpy as np
 
 ' Simulation attributes '
-nx      = 10
-ny      = 10
-it      = 900
+nx = 32
+ny = 32
+it = 900
 
 ' Constants '
 omega   = 1.0
@@ -17,7 +17,7 @@ density = 1.0
 t1      = 4/9.0
 t2      = 1/9.0
 t3      = 1/36.0
-deltaU  = 1e-7
+deltaU  = 1e-3
 c_squ   = 1/3.0
 
 ' Create the main arrays '
@@ -32,28 +32,36 @@ BOUND       = np.copy(DENSITY)
 BOUNDi      = np.ones(BOUND.shape, dtype=float)
 
 ' Create the scenery '
-scenery = 0
+scenery = 3
 
 # Tunnel
 if scenery == 0:
-    BOUND[0,:] = 1.0
-    BOUNDi[0,:] = 0.0
+    BOUND  [0,:] = 1.0
+    BOUNDi [0,:] = 0.0
 # Circle
 elif scenery == 1:
     for i in xrange(nx):
         for j in xrange(ny):
             if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
-                BOUND[i,j] = 1.0
-                BOUNDi[i,j] = 0.0
-    BOUND[:,0] = 1.0
-    BOUNDi[:,0] = 0.0
+                BOUND  [i,j] = 1.0
+                BOUNDi [i,j] = 0.0
+    BOUND  [:,0] = 1.0
+    BOUNDi [:,0] = 0.0
 # Random porous domain
 elif scenery == 2:
     BOUND  = np.random.randint(2, size=(nx,ny)).astype(np.float32)
     for i in xrange(nx):
         for j in xrange(ny):
             if BOUND[i,j] == 1.0:
-                BOUNDi[i,j] = 0.0
+                BOUNDi [i,j] = 0.0
+# Lid driven cavity cavity
+elif scenery == 3:
+    BOUND  [-1,:] = 1.0
+    BOUNDi [-1,:] = 0.0
+    BOUND  [1:,0]  = 1.0
+    BOUNDi [1:,0]  = 0.0
+    BOUND  [1:,-1] = 1.0
+    BOUNDi [1:,-1] = 0.0
 
 ts=0
 while(ts<it):
@@ -116,7 +124,11 @@ while(ts<it):
     T2 = F[6,:,:]+F[7,:,:]+F[8,:,:]
     UY = (T1-T2)/DENSITY
     
-    UX[:,0] = UX[:,0]+deltaU # increase inlet pressure
+    # Increase inlet pressure
+    if scenery != 3:
+        UX[:,0] += deltaU 
+    else:
+        UX[0,:] += deltaU
     
     UX[:,:] *= BOUNDi
     UY[:,:] *= BOUNDi
@@ -156,4 +168,5 @@ UY *= -1
 plt.hold(True)
 plt.quiver(UX,UY, pivot='middle', color='blue')
 plt.imshow(BOUND, interpolation='nearest', cmap='gist_yarg')
+#plt.imshow(np.sqrt(UX*UX+UY*UY)) # fancy rainbow plot
 plt.show()
