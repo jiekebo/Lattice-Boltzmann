@@ -12,7 +12,7 @@ from pycuda.compiler import SourceModule
 ' Simulation attributes '
 nx      = 10
 ny      = 10
-it      = 50
+it      = 10
 
 ' Constants '
 omega   = 1.0
