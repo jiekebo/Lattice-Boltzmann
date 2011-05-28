@@ -9,7 +9,7 @@ import numpy as np
 ' Simulation attributes '
 nx      = 10
 ny      = 10
-it      = 150
+it      = 3
 
 ' Constants '
 omega   = 1.0
@@ -28,60 +28,69 @@ FEQ         = np.copy(F)
 DENSITY     = np.zeros((nx,ny), dtype=float)
 UX          = np.copy(DENSITY)
 UY          = np.copy(DENSITY)
+BOUND       = np.copy(DENSITY)
+BOUNDi      = np.ones(BOUND.shape, dtype=float)
 
 ' Create the scenery '
-BOUND   = np.zeros((nx,ny), dtype=float)
-BOUNDi  = np.ones(BOUND.shape, dtype=float)
+scenery = 0
 
-#for i in xrange(nx):
-#    for j in xrange(ny):
-#        if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
-#            BOUND [i,j] = 1.0
-#            BOUNDi [i,j] = 0.0
-#BOUND[:,0] = 1.0
-#BOUNDi[:,0] = 0.0
-
-#BOUND = np.random.randint(2, size=(nx,ny)).astype(np.float32)
-
-BOUND[0,:] = 1.0
-BOUNDi[0,:] = 0.0
+# Tunnel
+if scenery == 0:
+    BOUND[0,:] = 1.0
+    BOUNDi[0,:] = 0.0
+# Circle
+elif scenery == 1:
+    for i in xrange(nx):
+        for j in xrange(ny):
+            if ((i-4)**2+(j-5)**2+(5-6)**2) < 6:
+                BOUND[i,j] = 1.0
+                BOUNDi[i,j] = 0.0
+    BOUND[:,0] = 1.0
+    BOUNDi[:,0] = 0.0
+# Random porous domain
+elif scenery == 2:
+    BOUND  = np.random.randint(2, size=(nx,ny)).astype(np.float32)
+    for i in xrange(nx):
+        for j in xrange(ny):
+            if BOUND[i,j] == 1.0:
+                BOUNDi[i,j] = 0.0
 
 ts=0
 while(ts<it):
     T[:] = F
     # propagate nearest neigbours
-    F[1,:,0]    = T[1,:,-1]
-    F[1,:,1:]   = T[1,:,:-1]        # +x
-    
-    F[3,0,:]    = T[3,-1,:]
-    F[3,1:,:]   = T[3,:-1,:]        # +y
-    
-    F[5,:,-1]   = T[5,:,0]
-    F[5,:,:-1]  = T[5,:,1:]         # -x
-    
-    F[7,-1,:]   = T[7,0,:]
-    F[7,:-1,:]  = T[7,1:,:]         # -y
+    F[1,:,0]     = T[1,:,-1]
+    F[1,:,1:]    = T[1,:,:-1]        # +x
+                 
+    F[3,0,:]     = T[3,-1,:]
+    F[3,1:,:]    = T[3,:-1,:]        # +y
+                 
+    F[5,:,-1]    = T[5,:,0]
+    F[5,:,:-1]   = T[5,:,1:]         # -x
+                 
+    F[7,-1,:]    = T[7,0,:]
+    F[7,:-1,:]   = T[7,1:,:]         # -y
     
     # propagate next-nearest neightbours
-    F[2,0,0]    = T[2,-1,-1]
-    F[2,0,1:]   = T[2,-1,:-1]
-    F[2,1:,0]   = T[2,:-1,-1]
-    F[2,1:,1:]  = T[2,:-1,:-1]      # +x+y
-    
-    F[4,0,-1]   = T[4,-1,0]
-    F[4,0,:-1]  = T[4,-1,1:]
-    F[4,1:,-1]  = T[4,:-1,0]
-    F[4,1:,:-1] = T[4,:-1,1:]       # -x+y
-    
-    F[6,-1,-1]  = T[6,0,0]
-    F[6,-1,:-1] = T[6,0,1:]
-    F[6,:-1,-1] = T[6,1:,0]
-    F[6,:-1,:-1]= T[6,1:,1:]        # -x-y
-    
-    F[8,-1,0]   = T[8,0,-1]
-    F[8,-1,1:]  = T[8,0,:-1]
-    F[8,:-1,0]  = T[8,1:,-1]
-    F[8,:-1,1:] = T[8,1:,:-1]       # +x-y
+    F[2,0,0]     = T[2,-1,-1]
+    F[2,0,1:]    = T[2,-1,:-1]
+    F[2,1:,0]    = T[2,:-1,-1]
+    F[2,1:,1:]   = T[2,:-1,:-1]      # +x+y
+                 
+    F[4,0,-1]    = T[4,-1,0]
+    F[4,0,:-1]   = T[4,-1,1:]
+    F[4,1:,-1]   = T[4,:-1,0]
+    F[4,1:,:-1]  = T[4,:-1,1:]       # -x+y
+                 
+    F[6,-1,-1]   = T[6,0,0]
+    F[6,-1,:-1]  = T[6,0,1:]
+    F[6,:-1,-1]  = T[6,1:,0]
+    F[6,:-1,:-1] = T[6,1:,1:]        # -x-y
+                 
+    F[8,-1,0]    = T[8,0,-1]
+    F[8,-1,1:]   = T[8,0,:-1]
+    F[8,:-1,0]   = T[8,1:,-1]
+    F[8,:-1,1:]  = T[8,1:,:-1]       # +x-y
     
     # Densities bouncing back at next timestep
     BOUNCEBACK = np.zeros(F.shape, dtype=float)
@@ -145,6 +154,6 @@ while(ts<it):
 import matplotlib.pyplot as plt
 UY *= -1
 plt.hold(True)
-plt.quiver(UX,UY, pivot='middle')
-plt.imshow(BOUND)
+plt.quiver(UX,UY, pivot='middle', color='blue')
+plt.imshow(BOUND, interpolation='nearest', cmap='gist_yarg')
 plt.show()
