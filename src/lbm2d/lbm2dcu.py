@@ -99,10 +99,10 @@ cuda.memcpy_htod(U_C8_gpu, DENSITY)
 
 ' Definition of kernels '
 propagateKernel = """
-    //   F4  F3  F2
-    //     \ | /
-    //  F5--F0--F1
-    //    / | \
+    // F4  F3  F2
+    //   \ |  /
+    // F5--F0--F1
+    //   / |  \
     // F6  F7  F8
     
     __global__ void propagateKernel(float *F, float *T) {
