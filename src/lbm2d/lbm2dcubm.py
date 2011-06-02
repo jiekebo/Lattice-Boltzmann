@@ -312,16 +312,6 @@ def loop(it):
 
 ' Run the loop '
 loop(900)
-
-' Copy UX and UY back to host '
-cuda.memcpy_dtoh(UX, UX_gpu)
-cuda.memcpy_dtoh(UY, UY_gpu)
-
-' Plot '
-import matplotlib.pyplot as plt
-UY *= -1
-plt.hold(True)
-plt.quiver(UX,UY, pivot='middle', color='blue')
-plt.imshow(BOUND, interpolation='nearest', cmap='gist_yarg')
-plt.imshow(np.sqrt(UX*UX+UY*UY)) # fancy rainbow plot
-plt.show()
+        
+import timeit
+t = timeit.Timer("loop")
