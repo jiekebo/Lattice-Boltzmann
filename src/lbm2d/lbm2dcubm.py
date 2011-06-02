@@ -276,7 +276,7 @@ bouncebackKernel = """
     """
 
 ' Get kernel handles '
-mod = SourceModule(propagateKernel + densityKernel + eqKernel + bouncebackKernel)
+mod         = SourceModule(propagateKernel + densityKernel + eqKernel + bouncebackKernel)
 prop        = mod.get_function("propagateKernel")
 density     = mod.get_function("densityKernel")
 eq          = mod.get_function("eqKernel")
@@ -309,9 +309,10 @@ def loop(it):
         cuda.memcpy_dtoh(F, F_gpu)
         
         ts += 1
-
-' Run the loop '
-loop(900)
         
 import timeit
-t = timeit.Timer("loop")
+iterations = 900
+statement = "loop(%s)" % iterations
+t = timeit.Timer(statement,"from __main__ import loop")
+time = t.timeit(1)
+print "took %fs\n" % time

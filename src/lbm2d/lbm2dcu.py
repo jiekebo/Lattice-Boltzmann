@@ -276,7 +276,7 @@ bouncebackKernel = """
     """
 
 ' Get kernel handles '
-mod = SourceModule(propagateKernel + densityKernel + eqKernel + bouncebackKernel)
+mod         = SourceModule(propagateKernel + densityKernel + eqKernel + bouncebackKernel)
 prop        = mod.get_function("propagateKernel")
 density     = mod.get_function("densityKernel")
 eq          = mod.get_function("eqKernel")
