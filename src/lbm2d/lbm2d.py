@@ -7,9 +7,9 @@ Created on May 23, 2011
 import numpy as np
 
 ' Simulation attributes '
-nx = 32
-ny = 32
-it = 900
+nx = 10
+ny = 10
+it = 150
 
 ' Constants '
 omega   = 1.0
@@ -17,7 +17,7 @@ density = 1.0
 t1      = 4/9.0
 t2      = 1/9.0
 t3      = 1/36.0 
-deltaU  = 1e-6
+deltaU  = 1e-7
 c_squ   = 1/3.0
 
 ' Create the main arrays '
@@ -166,7 +166,10 @@ while(ts<it):
 import matplotlib.pyplot as plt
 UY *= -1
 plt.hold(True)
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Flow field after %sdt' % it)
 plt.quiver(UX,UY, pivot='middle', color='blue')
 plt.imshow(BOUND, interpolation='nearest', cmap='gist_yarg')
-plt.imshow(np.sqrt(UX*UX+UY*UY))
+#plt.imshow(np.sqrt(UX**2+UY**2))
 plt.show()
