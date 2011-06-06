@@ -10,8 +10,8 @@ import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 ' Simulation attributes '
-nx = 10
-ny = 10
+nx = 23
+ny = 23
 it = 150
 
 ' Constants '
@@ -110,37 +110,46 @@ propagateKernel = """
     __global__ void propagateKernel(float *F, float *T) {
         int x     = threadIdx.x + blockIdx.x * blockDim.x;
         int y     = threadIdx.y + blockIdx.y * blockDim.y;
-        int nx    = blockDim.x * gridDim.x;
-        int ny    = blockDim.y * gridDim.y;
+        //int nx    = blockDim.x * gridDim.x;
+        //int ny    = blockDim.y * gridDim.y;
+        int nx    = %(WIDTH)s;
+        int ny    = %(HEIGHT)s;
         int size  = nx * ny;
         
-        // nearest neighbours
-        int F1 = (x==0?nx-1:x-1) + y * nx; // +x
-        int F3 = x + (y==0?ny-1:y-1) * nx; // +y
-        int F5 = (x==nx-1?0:x+1) + y * nx; // -x
-        int F7 = x + (y==ny-1?0:y+1) * nx; // -y
-        
-        // next-nearest neighbours
-        int F2 = (x==0?nx-1:x-1) + (y==0?ny-1:y-1) * nx; //+x+y
-        int F4 = (x==nx-1?0:x+1) + (y==0?ny-1:y-1) * nx; //-x+y
-        int F6 = (x==nx-1?0:x+1) + (y==ny-1?0:y+1) * nx; //-x-y
-        int F8 = (x==0?nx-1:x-1) + (y==ny-1?0:y+1) * nx; //+x-y
-        
-        // current point
-        int cur = x + y * nx;
-        
-        // propagate nearest
-        F[1*size + cur] = T[1*size + F1];
-        F[3*size + cur] = T[3*size + F3];
-        F[5*size + cur] = T[5*size + F5];
-        F[7*size + cur] = T[7*size + F7];
-        
-        // propagate next-nearest
-        F[2*size + cur] = T[2*size + F2];
-        F[4*size + cur] = T[4*size + F4];
-        F[6*size + cur] = T[6*size + F6];
-        F[8*size + cur] = T[8*size + F8];
+        if(x<nx || y<ny) {
+            // nearest neighbours
+            int F1 = (x==0?nx-1:x-1) + y * nx; // +x
+            int F3 = x + (y==0?ny-1:y-1) * nx; // +y
+            int F5 = (x==nx-1?0:x+1) + y * nx; // -x
+            int F7 = x + (y==ny-1?0:y+1) * nx; // -y
+            
+            // next-nearest neighbours
+            int F2 = (x==0?nx-1:x-1) + (y==0?ny-1:y-1) * nx; //+x+y
+            int F4 = (x==nx-1?0:x+1) + (y==0?ny-1:y-1) * nx; //-x+y
+            int F6 = (x==nx-1?0:x+1) + (y==ny-1?0:y+1) * nx; //-x-y
+            int F8 = (x==0?nx-1:x-1) + (y==ny-1?0:y+1) * nx; //+x-y
+            
+            // current point
+            int cur = x + y * nx;
+            
+            // propagate nearest
+            F[1*size + cur] = T[1*size + F1];
+            F[3*size + cur] = T[3*size + F3];
+            F[5*size + cur] = T[5*size + F5];
+            F[7*size + cur] = T[7*size + F7];
+            
+            // propagate next-nearest
+            F[2*size + cur] = T[2*size + F2];
+            F[4*size + cur] = T[4*size + F4];
+            F[6*size + cur] = T[6*size + F6];
+            F[8*size + cur] = T[8*size + F8];
+        }
     }"""
+    
+propagateKernel = propagateKernel % {
+    'WIDTH': nx,
+    'HEIGHT': ny 
+    }
     
 densityKernel = """
     __global__ void densityKernel(float *F, float *BOUND, float * BOUNCEBACK, 
@@ -150,56 +159,64 @@ densityKernel = """
         int y     = threadIdx.y + blockIdx.y * blockDim.y;
         int cur   = x + y * blockDim.x * gridDim.x;
         
-        if(BOUND[cur] == 1.0f) {
-            BOUNCEBACK[1*size + cur] = F[5*size + cur];
-            BOUNCEBACK[2*size + cur] = F[6*size + cur];
-            BOUNCEBACK[3*size + cur] = F[7*size + cur];
-            BOUNCEBACK[4*size + cur] = F[8*size + cur];
-            BOUNCEBACK[5*size + cur] = F[1*size + cur];
-            BOUNCEBACK[6*size + cur] = F[2*size + cur];
-            BOUNCEBACK[7*size + cur] = F[3*size + cur];
-            BOUNCEBACK[8*size + cur] = F[4*size + cur];
-        }
-        
-        float DENSITY = F[0*size + cur] + 
-                        F[1*size + cur] +
-                        F[2*size + cur] +
-                        F[3*size + cur] +
-                        F[4*size + cur] +
-                        F[5*size + cur] +
-                        F[6*size + cur] +
-                        F[7*size + cur] +
-                        F[8*size + cur];
-        
-        D[cur] = DENSITY;
-        
-        UX[cur] = ((F[1*size + cur] + F[2*size + cur] + F[8*size + cur]) -
-                   (F[4*size + cur] + F[5*size + cur] + F[6*size + cur]))
-                    / DENSITY;
-                 
-        UY[cur] = ((F[2*size + cur] + F[3*size + cur] + F[4*size + cur]) -
-                   (F[6*size + cur] + F[7*size + cur] + F[8*size + cur])) 
-                    / DENSITY;
-        
-        if (%s == 3){
-            // For lid driven cavity
-            if(y == 0) {
-                UX[cur] += 0.04f;
+        if(x < %(WIDTH)s || y < %(HEIGHT)s) {
+            if(BOUND[cur] == 1.0f) {
+                BOUNCEBACK[1*size + cur] = F[5*size + cur];
+                BOUNCEBACK[2*size + cur] = F[6*size + cur];
+                BOUNCEBACK[3*size + cur] = F[7*size + cur];
+                BOUNCEBACK[4*size + cur] = F[8*size + cur];
+                BOUNCEBACK[5*size + cur] = F[1*size + cur];
+                BOUNCEBACK[6*size + cur] = F[2*size + cur];
+                BOUNCEBACK[7*size + cur] = F[3*size + cur];
+                BOUNCEBACK[8*size + cur] = F[4*size + cur];
             }
-        } else {
-            if(x == 0) {
-                UX[cur] += %sf;
+            
+            float DENSITY = F[0*size + cur] + 
+                            F[1*size + cur] +
+                            F[2*size + cur] +
+                            F[3*size + cur] +
+                            F[4*size + cur] +
+                            F[5*size + cur] +
+                            F[6*size + cur] +
+                            F[7*size + cur] +
+                            F[8*size + cur];
+            
+            D[cur] = DENSITY;
+            
+            UX[cur] = ((F[1*size + cur] + F[2*size + cur] + F[8*size + cur]) -
+                       (F[4*size + cur] + F[5*size + cur] + F[6*size + cur]))
+                        / DENSITY;
+                     
+            UY[cur] = ((F[2*size + cur] + F[3*size + cur] + F[4*size + cur]) -
+                       (F[6*size + cur] + F[7*size + cur] + F[8*size + cur])) 
+                        / DENSITY;
+            
+            if (%(SCENERY)s == 3){
+                // For lid driven cavity
+                if(y == 0) {
+                    UX[cur] += 0.04f;
+                }
+            } else {
+                if(x == 0) {
+                    UX[cur] += %(DELTAU)sf;
+                }
             }
-        }
-        
-        if(BOUND[cur] == 1.0f) {
-            D[cur] = 0.0f;
-            UX[cur] = 0.0f;
-            UY[cur] = 0.0f;
+            
+            if(BOUND[cur] == 1.0f) {
+                D[cur] = 0.0f;
+                UX[cur] = 0.0f;
+                UY[cur] = 0.0f;
+            }
         }
     }
     """
-densityKernel = densityKernel % (scenery, deltaU)
+densityKernel = densityKernel % {
+    'WIDTH': nx,
+    'HEIGHT': ny,
+    'SCENERY': scenery, 
+    'DELTAU': deltaU
+}
+
     
 eqKernel = """
     __global__ void eqKernel(float *F, float* FEQ, float *DENSITY, float *UX, 
@@ -211,53 +228,63 @@ eqKernel = """
         int cur   = x + y * blockDim.x * gridDim.x;
         
         // constants
-        float t1 = %s;
-        float t2 = %s;
-        float t3 = %s;
-        float c_squ = %s;
-        float omega = %s;
+        float t1 = %(T1)s;
+        float t2 = %(T2)s;
+        float t3 = %(T3)s;
+        float c_squ = %(C_SQU)s;
+        float omega = %(OMEGA)s;
         
-        U_SQU[cur] = UX[cur]*UX[cur] + UY[cur]*UY[cur];
-        U_C2[cur]  = UX[cur]+UY[cur];
-        U_C4[cur]  = -UX[cur]+UY[cur];
-        U_C6[cur]  = -U_C2[cur];
-        U_C8[cur]  = -U_C4[cur];
-        
-        // Calculate equilibrium distribution: stationary
-        FEQ[0*size + cur] = t1*DENSITY[cur]*(1-U_SQU[cur]/(2*c_squ));
-        
-        // nearest-neighbours
-        FEQ[1*size + cur] = t2*DENSITY[cur]*(1+UX[cur]/c_squ+0.5f*
-                    (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-        FEQ[3*size + cur] = t2*DENSITY[cur]*(1+UY[cur]/c_squ+0.5f*
-                    (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-        FEQ[5*size + cur] = t2*DENSITY[cur]*(1-UX[cur]/c_squ+0.5f*
-                    (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-        FEQ[7*size + cur] = t2*DENSITY[cur]*(1-UY[cur]/c_squ+0.5f*
-                    (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-        
-        // next-nearest neighbours
-        FEQ[2*size + cur] = t3*DENSITY[cur]*(1+U_C2[cur]/c_squ+0.5f*
-                    (U_C2[cur]/c_squ)*(U_C2[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-        FEQ[4*size + cur] = t3*DENSITY[cur]*(1+U_C4[cur]/c_squ+0.5f*
-                    (U_C4[cur]/c_squ)*(U_C4[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-        FEQ[6*size + cur] = t3*DENSITY[cur]*(1+U_C6[cur]/c_squ+0.5f*
-                    (U_C6[cur]/c_squ)*(U_C6[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-        FEQ[8*size + cur] = t3*DENSITY[cur]*(1+U_C8[cur]/c_squ+0.5f*
-                    (U_C8[cur]/c_squ)*(U_C8[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-        
-        F[0*size + cur] = omega*FEQ[0*size + cur]+(1-omega)*F[0*size + cur];
-        F[1*size + cur] = omega*FEQ[1*size + cur]+(1-omega)*F[1*size + cur];
-        F[2*size + cur] = omega*FEQ[2*size + cur]+(1-omega)*F[2*size + cur];
-        F[3*size + cur] = omega*FEQ[3*size + cur]+(1-omega)*F[3*size + cur];
-        F[4*size + cur] = omega*FEQ[4*size + cur]+(1-omega)*F[4*size + cur];
-        F[5*size + cur] = omega*FEQ[5*size + cur]+(1-omega)*F[5*size + cur];
-        F[6*size + cur] = omega*FEQ[6*size + cur]+(1-omega)*F[6*size + cur];
-        F[7*size + cur] = omega*FEQ[7*size + cur]+(1-omega)*F[7*size + cur];
-        F[8*size + cur] = omega*FEQ[8*size + cur]+(1-omega)*F[8*size + cur];
+        if(x < %(WIDTH)s || y < %(HEIGHT)s) {
+            U_SQU[cur] = UX[cur]*UX[cur] + UY[cur]*UY[cur];
+            U_C2[cur]  = UX[cur]+UY[cur];
+            U_C4[cur]  = -UX[cur]+UY[cur];
+            U_C6[cur]  = -U_C2[cur];
+            U_C8[cur]  = -U_C4[cur];
+            
+            // Calculate equilibrium distribution: stationary
+            FEQ[0*size + cur] = t1*DENSITY[cur]*(1-U_SQU[cur]/(2*c_squ));
+            
+            // nearest-neighbours
+            FEQ[1*size + cur] = t2*DENSITY[cur]*(1+UX[cur]/c_squ+0.5f*
+                        (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+            FEQ[3*size + cur] = t2*DENSITY[cur]*(1+UY[cur]/c_squ+0.5f*
+                        (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+            FEQ[5*size + cur] = t2*DENSITY[cur]*(1-UX[cur]/c_squ+0.5f*
+                        (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+            FEQ[7*size + cur] = t2*DENSITY[cur]*(1-UY[cur]/c_squ+0.5f*
+                        (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+            
+            // next-nearest neighbours
+            FEQ[2*size + cur] = t3*DENSITY[cur]*(1+U_C2[cur]/c_squ+0.5f*
+                        (U_C2[cur]/c_squ)*(U_C2[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+            FEQ[4*size + cur] = t3*DENSITY[cur]*(1+U_C4[cur]/c_squ+0.5f*
+                        (U_C4[cur]/c_squ)*(U_C4[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+            FEQ[6*size + cur] = t3*DENSITY[cur]*(1+U_C6[cur]/c_squ+0.5f*
+                        (U_C6[cur]/c_squ)*(U_C6[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+            FEQ[8*size + cur] = t3*DENSITY[cur]*(1+U_C8[cur]/c_squ+0.5f*
+                        (U_C8[cur]/c_squ)*(U_C8[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+            
+            F[0*size + cur] = omega*FEQ[0*size + cur]+(1-omega)*F[0*size + cur];
+            F[1*size + cur] = omega*FEQ[1*size + cur]+(1-omega)*F[1*size + cur];
+            F[2*size + cur] = omega*FEQ[2*size + cur]+(1-omega)*F[2*size + cur];
+            F[3*size + cur] = omega*FEQ[3*size + cur]+(1-omega)*F[3*size + cur];
+            F[4*size + cur] = omega*FEQ[4*size + cur]+(1-omega)*F[4*size + cur];
+            F[5*size + cur] = omega*FEQ[5*size + cur]+(1-omega)*F[5*size + cur];
+            F[6*size + cur] = omega*FEQ[6*size + cur]+(1-omega)*F[6*size + cur];
+            F[7*size + cur] = omega*FEQ[7*size + cur]+(1-omega)*F[7*size + cur];
+            F[8*size + cur] = omega*FEQ[8*size + cur]+(1-omega)*F[8*size + cur];
+        }
     }
     """
-eqKernel = eqKernel % (t1, t2, t3, c_squ, omega)
+eqKernel = eqKernel % {
+    'WIDTH': nx,
+    'HEIGHT': ny,
+    'T1': t1,
+    'T2': t2,
+    'T3': t3,
+    'C_SQU': c_squ,
+    'OMEGA': omega
+}
     
 bouncebackKernel = """
     __global__ void bouncebackKernel(float *F, float *BOUNCEBACK, 
@@ -266,18 +293,25 @@ bouncebackKernel = """
         int x     = threadIdx.x + blockIdx.x * blockDim.x;
         int y     = threadIdx.y + blockIdx.y * blockDim.y;
         int cur   = x + y * blockDim.x * gridDim.x;
-        if (BOUND[cur] == 1.0f) {
-            F[1*size + cur] = BOUNCEBACK[1*size + cur];
-            F[2*size + cur] = BOUNCEBACK[2*size + cur];
-            F[3*size + cur] = BOUNCEBACK[3*size + cur];
-            F[4*size + cur] = BOUNCEBACK[4*size + cur];
-            F[5*size + cur] = BOUNCEBACK[5*size + cur];
-            F[6*size + cur] = BOUNCEBACK[6*size + cur];
-            F[7*size + cur] = BOUNCEBACK[7*size + cur];
-            F[8*size + cur] = BOUNCEBACK[8*size + cur];
+        
+        if(x < %(WIDTH)s || y < %(HEIGHT)s) {
+            if (BOUND[cur] == 1.0f) {
+                F[1*size + cur] = BOUNCEBACK[1*size + cur];
+                F[2*size + cur] = BOUNCEBACK[2*size + cur];
+                F[3*size + cur] = BOUNCEBACK[3*size + cur];
+                F[4*size + cur] = BOUNCEBACK[4*size + cur];
+                F[5*size + cur] = BOUNCEBACK[5*size + cur];
+                F[6*size + cur] = BOUNCEBACK[6*size + cur];
+                F[7*size + cur] = BOUNCEBACK[7*size + cur];
+                F[8*size + cur] = BOUNCEBACK[8*size + cur];
+            }
         }
     }
     """
+bouncebackKernel = bouncebackKernel % {
+    'WIDTH': nx,
+    'HEIGHT': ny
+}
 
 ' Get kernel handles '
 mod         = SourceModule(propagateKernel + densityKernel + 

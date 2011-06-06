@@ -12,6 +12,7 @@ from pycuda.compiler import SourceModule
 ' Simulation attributes '
 nx = 32
 ny = 32
+it = 900
 
 ' Constants '
 omega   = 1.0
@@ -311,8 +312,7 @@ def loop(it):
         ts += 1
         
 import timeit
-iterations = 900
-statement = "loop(%s)" % iterations
+statement = "loop(%s)" % it
 t = timeit.Timer(statement,"from __main__ import loop")
 time = t.timeit(1)
 print "took %fs\n" % time
