@@ -172,7 +172,7 @@ t = timeit.Timer(statement,"from __main__ import loop")
 time = t.timeit(1)
 print "took %fs\n" % time
 
-
+'''
 import matplotlib.pyplot as plt
 UY *= -1
 plt.hold(True)
@@ -183,3 +183,4 @@ plt.quiver(UX,UY, pivot='middle', color='blue')
 plt.imshow(BOUND, interpolation='nearest', cmap='gist_yarg')
 #plt.imshow(np.sqrt(UX**2+UY**2))
 plt.show()
+'''

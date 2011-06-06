@@ -316,3 +316,21 @@ statement = "loop(%s)" % it
 t = timeit.Timer(statement,"from __main__ import loop")
 time = t.timeit(1)
 print "took %fs\n" % time
+
+'''
+' Copy UX and UY back to host '
+cuda.memcpy_dtoh(UX, UX_gpu)
+cuda.memcpy_dtoh(UY, UY_gpu)
+
+' Plot '
+import matplotlib.pyplot as plt
+UY *= -1
+plt.hold(True)
+plt.xlabel('x')
+plt.ylabel('y')
+plt.title('Flow field after %sdt' % it)
+plt.quiver(UX,UY, pivot='middle', color='blue')
+plt.imshow(BOUND, interpolation='nearest', cmap='gist_yarg')
+#plt.imshow(np.sqrt(UX*UX+UY*UY)) # fancy rainbow plot
+plt.show()
+'''
