@@ -10,8 +10,8 @@ import pycuda.autoinit
 from pycuda.compiler import SourceModule
 
 ' Simulation attributes '
-nx = 32
-ny = 32
+nx = 512
+ny = 512
 it = 1000
 
 ' Constants '
@@ -314,8 +314,10 @@ def loop(it):
 import timeit
 statement = "loop(%s)" % it
 t = timeit.Timer(statement,"from __main__ import loop")
-time = t.timeit(1)
-print "took %fs\n" % time
+time1 = t.timeit(1)
+time2 = t.timeit(1)
+time3 = t.timeit(1)
+print "%fs , %fs , %fs" % (time1,time2,time3)
 
 '''
 ' Copy UX and UY back to host '
