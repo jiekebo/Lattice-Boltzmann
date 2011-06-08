@@ -12,7 +12,7 @@ from pycuda.compiler import SourceModule
 ' Simulation attributes '
 nx = 23
 ny = 23
-it = 150
+it = 900
 
 ' Constants '
 omega   = 1.0
@@ -110,13 +110,12 @@ propagateKernel = """
     __global__ void propagateKernel(float *F, float *T) {
         int x     = threadIdx.x + blockIdx.x * blockDim.x;
         int y     = threadIdx.y + blockIdx.y * blockDim.y;
-        //int nx    = blockDim.x * gridDim.x;
-        //int ny    = blockDim.y * gridDim.y;
         int nx    = %(WIDTH)s;
         int ny    = %(HEIGHT)s;
         int size  = nx * ny;
+        int cur   = x + y * nx;        // current position
         
-        if(x<nx || y<ny) {
+        if(x < nx && y < ny) {
             // nearest neighbours
             int F1 = (x==0?nx-1:x-1) + y * nx; // +x
             int F3 = x + (y==0?ny-1:y-1) * nx; // +y
@@ -128,10 +127,7 @@ propagateKernel = """
             int F4 = (x==nx-1?0:x+1) + (y==0?ny-1:y-1) * nx; //-x+y
             int F6 = (x==nx-1?0:x+1) + (y==ny-1?0:y+1) * nx; //-x-y
             int F8 = (x==0?nx-1:x-1) + (y==ny-1?0:y+1) * nx; //+x-y
-            
-            // current point
-            int cur = x + y * nx;
-            
+
             // propagate nearest
             F[1*size + cur] = T[1*size + F1];
             F[3*size + cur] = T[3*size + F3];
@@ -145,21 +141,23 @@ propagateKernel = """
             F[8*size + cur] = T[8*size + F8];
         }
     }"""
-    
+
 propagateKernel = propagateKernel % {
     'WIDTH': nx,
     'HEIGHT': ny 
     }
-    
+
 densityKernel = """
     __global__ void densityKernel(float *F, float *BOUND, float * BOUNCEBACK, 
                                   float *D, float *UX, float *UY) {
-        int size  = blockDim.x * gridDim.x * blockDim.y * gridDim.y;
         int x     = threadIdx.x + blockIdx.x * blockDim.x;
         int y     = threadIdx.y + blockIdx.y * blockDim.y;
-        int cur   = x + y * blockDim.x * gridDim.x;
+        int nx    = %(WIDTH)s;
+        int ny    = %(HEIGHT)s;
+        int size  = nx * ny;
+        int cur   = x + y * nx;
         
-        if(x < %(WIDTH)s || y < %(HEIGHT)s) {
+        if(x < nx && y < ny) {
             if(BOUND[cur] == 1.0f) {
                 BOUNCEBACK[1*size + cur] = F[5*size + cur];
                 BOUNCEBACK[2*size + cur] = F[6*size + cur];
@@ -217,62 +215,65 @@ densityKernel = densityKernel % {
     'DELTAU': deltaU
 }
 
-    
 eqKernel = """
     __global__ void eqKernel(float *F, float* FEQ, float *DENSITY, float *UX, 
                              float *UY, float *U_SQU, float *U_C2, float *U_C4, 
                              float *U_C6, float *U_C8) {
-        int size = blockDim.x * gridDim.x * blockDim.y * gridDim.y;
         int x     = threadIdx.x + blockIdx.x * blockDim.x;
         int y     = threadIdx.y + blockIdx.y * blockDim.y;
-        int cur   = x + y * blockDim.x * gridDim.x;
+        int nx    = %(WIDTH)s;
+        int ny    = %(HEIGHT)s;
+        int size  = nx * ny;
+        int cur   = x + y * nx;
         
-        // constants
-        float t1 = %(T1)s;
-        float t2 = %(T2)s;
-        float t3 = %(T3)s;
-        float c_squ = %(C_SQU)s;
-        float omega = %(OMEGA)s;
-        
-        if(x < %(WIDTH)s || y < %(HEIGHT)s) {
-            U_SQU[cur] = UX[cur]*UX[cur] + UY[cur]*UY[cur];
-            U_C2[cur]  = UX[cur]+UY[cur];
-            U_C4[cur]  = -UX[cur]+UY[cur];
-            U_C6[cur]  = -U_C2[cur];
-            U_C8[cur]  = -U_C4[cur];
+        if(x < nx && y < ny) {
+            // constants
+            float t1 = %(T1)s;
+            float t2 = %(T2)s;
+            float t3 = %(T3)s;
+            float c_squ = %(C_SQU)s;
+            float omega = %(OMEGA)s;
             
-            // Calculate equilibrium distribution: stationary
-            FEQ[0*size + cur] = t1*DENSITY[cur]*(1-U_SQU[cur]/(2*c_squ));
-            
-            // nearest-neighbours
-            FEQ[1*size + cur] = t2*DENSITY[cur]*(1+UX[cur]/c_squ+0.5f*
-                        (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-            FEQ[3*size + cur] = t2*DENSITY[cur]*(1+UY[cur]/c_squ+0.5f*
-                        (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-            FEQ[5*size + cur] = t2*DENSITY[cur]*(1-UX[cur]/c_squ+0.5f*
-                        (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-            FEQ[7*size + cur] = t2*DENSITY[cur]*(1-UY[cur]/c_squ+0.5f*
-                        (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-            
-            // next-nearest neighbours
-            FEQ[2*size + cur] = t3*DENSITY[cur]*(1+U_C2[cur]/c_squ+0.5f*
-                        (U_C2[cur]/c_squ)*(U_C2[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-            FEQ[4*size + cur] = t3*DENSITY[cur]*(1+U_C4[cur]/c_squ+0.5f*
-                        (U_C4[cur]/c_squ)*(U_C4[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-            FEQ[6*size + cur] = t3*DENSITY[cur]*(1+U_C6[cur]/c_squ+0.5f*
-                        (U_C6[cur]/c_squ)*(U_C6[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-            FEQ[8*size + cur] = t3*DENSITY[cur]*(1+U_C8[cur]/c_squ+0.5f*
-                        (U_C8[cur]/c_squ)*(U_C8[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
-            
-            F[0*size + cur] = omega*FEQ[0*size + cur]+(1-omega)*F[0*size + cur];
-            F[1*size + cur] = omega*FEQ[1*size + cur]+(1-omega)*F[1*size + cur];
-            F[2*size + cur] = omega*FEQ[2*size + cur]+(1-omega)*F[2*size + cur];
-            F[3*size + cur] = omega*FEQ[3*size + cur]+(1-omega)*F[3*size + cur];
-            F[4*size + cur] = omega*FEQ[4*size + cur]+(1-omega)*F[4*size + cur];
-            F[5*size + cur] = omega*FEQ[5*size + cur]+(1-omega)*F[5*size + cur];
-            F[6*size + cur] = omega*FEQ[6*size + cur]+(1-omega)*F[6*size + cur];
-            F[7*size + cur] = omega*FEQ[7*size + cur]+(1-omega)*F[7*size + cur];
-            F[8*size + cur] = omega*FEQ[8*size + cur]+(1-omega)*F[8*size + cur];
+            if(x < %(WIDTH)s || y < %(HEIGHT)s) {
+                U_SQU[cur] = UX[cur]*UX[cur] + UY[cur]*UY[cur];
+                U_C2[cur]  = UX[cur]+UY[cur];
+                U_C4[cur]  = -UX[cur]+UY[cur];
+                U_C6[cur]  = -U_C2[cur];
+                U_C8[cur]  = -U_C4[cur];
+                
+                // Calculate equilibrium distribution: stationary
+                FEQ[0*size + cur] = t1*DENSITY[cur]*(1-U_SQU[cur]/(2*c_squ));
+                
+                // nearest-neighbours
+                FEQ[1*size + cur] = t2*DENSITY[cur]*(1+UX[cur]/c_squ+0.5f*
+                            (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                FEQ[3*size + cur] = t2*DENSITY[cur]*(1+UY[cur]/c_squ+0.5f*
+                            (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                FEQ[5*size + cur] = t2*DENSITY[cur]*(1-UX[cur]/c_squ+0.5f*
+                            (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                FEQ[7*size + cur] = t2*DENSITY[cur]*(1-UY[cur]/c_squ+0.5f*
+                            (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                
+                // next-nearest neighbours
+                FEQ[2*size + cur] = t3*DENSITY[cur]*(1+U_C2[cur]/c_squ+0.5f*
+                            (U_C2[cur]/c_squ)*(U_C2[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                FEQ[4*size + cur] = t3*DENSITY[cur]*(1+U_C4[cur]/c_squ+0.5f*
+                            (U_C4[cur]/c_squ)*(U_C4[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                FEQ[6*size + cur] = t3*DENSITY[cur]*(1+U_C6[cur]/c_squ+0.5f*
+                            (U_C6[cur]/c_squ)*(U_C6[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                FEQ[8*size + cur] = t3*DENSITY[cur]*(1+U_C8[cur]/c_squ+0.5f*
+                            (U_C8[cur]/c_squ)*(U_C8[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                
+                F[0*size + cur] = omega*FEQ[0*size + cur]+(1-omega)*F[0*size + cur];
+                F[1*size + cur] = omega*FEQ[1*size + cur]+(1-omega)*F[1*size + cur];
+                F[2*size + cur] = omega*FEQ[2*size + cur]+(1-omega)*F[2*size + cur];
+                F[3*size + cur] = omega*FEQ[3*size + cur]+(1-omega)*F[3*size + cur];
+                F[4*size + cur] = omega*FEQ[4*size + cur]+(1-omega)*F[4*size + cur];
+                F[5*size + cur] = omega*FEQ[5*size + cur]+(1-omega)*F[5*size + cur];
+                F[6*size + cur] = omega*FEQ[6*size + cur]+(1-omega)*F[6*size + cur];
+                F[7*size + cur] = omega*FEQ[7*size + cur]+(1-omega)*F[7*size + cur];
+                F[8*size + cur] = omega*FEQ[8*size + cur]+(1-omega)*F[8*size + cur];
+            }
         }
     }
     """
@@ -285,16 +286,18 @@ eqKernel = eqKernel % {
     'C_SQU': c_squ,
     'OMEGA': omega
 }
-    
+
 bouncebackKernel = """
     __global__ void bouncebackKernel(float *F, float *BOUNCEBACK, 
                                      float *BOUND) {
-        int size = blockDim.x * gridDim.x * blockDim.y * gridDim.y;
         int x     = threadIdx.x + blockIdx.x * blockDim.x;
         int y     = threadIdx.y + blockIdx.y * blockDim.y;
-        int cur   = x + y * blockDim.x * gridDim.x;
+        int nx    = %(WIDTH)s;
+        int ny    = %(HEIGHT)s;
+        int size  = nx * ny;
+        int cur   = x + y * nx;
         
-        if(x < %(WIDTH)s || y < %(HEIGHT)s) {
+        if(x < nx && y < ny) {
             if (BOUND[cur] == 1.0f) {
                 F[1*size + cur] = BOUNCEBACK[1*size + cur];
                 F[2*size + cur] = BOUNCEBACK[2*size + cur];
@@ -344,7 +347,7 @@ def loop(iterations):
         ' Transfer bounceback to obstacle nodes '
         bounceback(F_gpu, BOUNCEBACK_gpu, BOUND_gpu,
                    block=(blockDimX,blockDimY,1), grid=(gridDimX,gridDimY))
-        
+                              
         ' Copy F to host for copy to T in beginning of loop '
         cuda.memcpy_dtoh(F, F_gpu)
         

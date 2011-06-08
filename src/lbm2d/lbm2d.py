@@ -7,9 +7,9 @@ Created on May 23, 2011
 import numpy as np
 
 ' Simulation attributes '
-nx = 10
-ny = 10
-it = 150
+nx = 23
+ny = 23
+it = 900
 
 ' Constants '
 omega   = 1.0
@@ -165,7 +165,8 @@ def loop(it):
         
         ts += 1
         
-loop(900)
+' Run the loop '
+loop(it)
 
 import matplotlib.pyplot as plt
 UY *= -1
