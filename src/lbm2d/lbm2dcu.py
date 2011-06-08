@@ -141,11 +141,10 @@ propagateKernel = """
             F[8*size + cur] = T[8*size + F8];
         }
     }"""
-
 propagateKernel = propagateKernel % {
     'WIDTH': nx,
     'HEIGHT': ny 
-    }
+}
 
 densityKernel = """
     __global__ void densityKernel(float *F, float *BOUND, float * BOUNCEBACK, 
