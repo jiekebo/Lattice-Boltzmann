@@ -246,33 +246,42 @@ eqKernel = """
                 
                 // nearest-neighbours
                 FEQ[1*size + cur] = t2*DENSITY[cur]*(1+UX[cur]/c_squ+0.5f*
-                            (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                         (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
                 FEQ[3*size + cur] = t2*DENSITY[cur]*(1+UY[cur]/c_squ+0.5f*
-                            (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                         (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
                 FEQ[5*size + cur] = t2*DENSITY[cur]*(1-UX[cur]/c_squ+0.5f*
-                            (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                         (UX[cur]/c_squ)*(UX[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
                 FEQ[7*size + cur] = t2*DENSITY[cur]*(1-UY[cur]/c_squ+0.5f*
-                            (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                         (UY[cur]/c_squ)*(UY[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
                 
                 // next-nearest neighbours
                 FEQ[2*size + cur] = t3*DENSITY[cur]*(1+U_C2[cur]/c_squ+0.5f*
-                            (U_C2[cur]/c_squ)*(U_C2[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                     (U_C2[cur]/c_squ)*(U_C2[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
                 FEQ[4*size + cur] = t3*DENSITY[cur]*(1+U_C4[cur]/c_squ+0.5f*
-                            (U_C4[cur]/c_squ)*(U_C4[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                     (U_C4[cur]/c_squ)*(U_C4[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
                 FEQ[6*size + cur] = t3*DENSITY[cur]*(1+U_C6[cur]/c_squ+0.5f*
-                            (U_C6[cur]/c_squ)*(U_C6[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                     (U_C6[cur]/c_squ)*(U_C6[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
                 FEQ[8*size + cur] = t3*DENSITY[cur]*(1+U_C8[cur]/c_squ+0.5f*
-                            (U_C8[cur]/c_squ)*(U_C8[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
+                     (U_C8[cur]/c_squ)*(U_C8[cur]/c_squ)-U_SQU[cur]/(2*c_squ));
                 
-                F[0*size + cur] = omega*FEQ[0*size + cur]+(1-omega)*F[0*size + cur];
-                F[1*size + cur] = omega*FEQ[1*size + cur]+(1-omega)*F[1*size + cur];
-                F[2*size + cur] = omega*FEQ[2*size + cur]+(1-omega)*F[2*size + cur];
-                F[3*size + cur] = omega*FEQ[3*size + cur]+(1-omega)*F[3*size + cur];
-                F[4*size + cur] = omega*FEQ[4*size + cur]+(1-omega)*F[4*size + cur];
-                F[5*size + cur] = omega*FEQ[5*size + cur]+(1-omega)*F[5*size + cur];
-                F[6*size + cur] = omega*FEQ[6*size + cur]+(1-omega)*F[6*size + cur];
-                F[7*size + cur] = omega*FEQ[7*size + cur]+(1-omega)*F[7*size + cur];
-                F[8*size + cur] = omega*FEQ[8*size + cur]+(1-omega)*F[8*size + cur];
+                F[0*size + cur] = omega*FEQ[0*size + cur] +
+                                                     (1-omega)*F[0*size + cur];
+                F[1*size + cur] = omega*FEQ[1*size + cur] +
+                                                     (1-omega)*F[1*size + cur];
+                F[2*size + cur] = omega*FEQ[2*size + cur] +
+                                                     (1-omega)*F[2*size + cur];
+                F[3*size + cur] = omega*FEQ[3*size + cur] +
+                                                     (1-omega)*F[3*size + cur];
+                F[4*size + cur] = omega*FEQ[4*size + cur] +
+                                                     (1-omega)*F[4*size + cur];
+                F[5*size + cur] = omega*FEQ[5*size + cur] +
+                                                     (1-omega)*F[5*size + cur];
+                F[6*size + cur] = omega*FEQ[6*size + cur] +
+                                                     (1-omega)*F[6*size + cur];
+                F[7*size + cur] = omega*FEQ[7*size + cur] +
+                                                     (1-omega)*F[7*size + cur];
+                F[8*size + cur] = omega*FEQ[8*size + cur] +
+                                                     (1-omega)*F[8*size + cur];
             }
         }
     }
